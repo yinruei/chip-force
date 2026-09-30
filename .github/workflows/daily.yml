@@ -5,6 +5,11 @@ on:
     # 週一到週五 台北時間 17:47（UTC 09:47）— 證交所法人資料約 16:30 前公布
     - cron: "47 9 * * 1-5"
   workflow_dispatch:        # 也可在 Actions 頁面手動按 Run
+    inputs:
+      date:
+        description: "指定日期 YYYY-MM-DD（留空＝今天）"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -25,9 +30,9 @@ jobs:
 
       # 第一次會回抓約 60+ 個交易日（證交所限流，約 10–20 分鐘），之後每天只抓 1 天
       - name: 三大法人 × 佔股本比
-        run: python chip_force.py --investor 三大法人
+        run: python chip_force.py --investor 三大法人 ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
       - name: 投信 × 佔股本比（投本比）
-        run: python chip_force.py --investor 投信 --mode 穩健
+        run: python chip_force.py --investor 投信 --mode 穩健 ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
 
       - name: 顯示在 Actions 摘要
         if: always()
