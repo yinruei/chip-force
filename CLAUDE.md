@@ -1,0 +1,34 @@
+# chip_force — 籌碼力度每日選股
+
+台股「法人買賣超 ÷ 發行股數（佔股本比）→ 過去 N 日標準化 z → z ≥ k 且買超」選股程式，依老墨「法人力度指標」公開說明重建（原 XQ 腳本加密，數值可能與原版略有差異）。
+
+## 檔案
+
+- `chip_force.py` — 唯一程式，只用 Python 標準函式庫，無需安裝套件
+- `data/YYYYMMDD.csv` — 每日原始資料快取（全市場法人買賣超＋發行股數），**進版控**，換電腦不用重抓
+- `output/` — 每日結果：`latest_<法人>.md`、`YYYYMMDD_<法人>.md`、`YYYYMMDD_<法人>_顯著買超.csv`
+- 排程：`.github/workflows/daily.yml`（週一至週五台北 17:47，自動 commit 回 repo）
+
+## 常用指令
+
+```bash
+python chip_force.py                                   # 三大法人，W=60、k=2.0
+python chip_force.py --investor 投信 --mode 穩健        # 投本比
+python chip_force.py --investor 外資 --window 120 --k 2.5 --confirm 2
+python chip_force.py --date 2026-09-29                 # 指定日期
+```
+
+使用者說「跑今天的籌碼力度」＝執行預設指令並摘要 `output/latest_三大法人.md`；
+「把門檻改成 2.5」＝改 `--k`（若要改排程預設，同步改 `daily.yml` 與 `argparse` 預設值）。
+
+## 參數（對應原指標 8 個參數）
+
+`--investor`（三大法人／外資／投信／自營）、`--window`（20/60/120）、`--k`（1.5/2.0/2.5）、`--confirm`（1/2/3）、`--mode`（靈敏／穩健）、`--min-ratio`、`--fast`（10/20/30）、`--slow`（40/60/120）。
+
+## 注意事項
+
+- 資料來源：證交所 T86、MI_QFIIS（上市）；櫃買中心（上櫃，選配，介面常改版，失敗時自動略過只跑上市）。證交所有限流，程式內已 `sleep`，不要拿掉。
+- 欄位以關鍵字比對（`_col`），證交所改欄位名時先檢查 `fetch_twse_day` / `fetch_tpex_day`。
+- 僅納入 4 碼普通股（`is_common_stock`）。
+- 快取、輸出都由 GitHub Actions 自動 commit；本機跑完若要保留結果再自行 commit，避免與 bot 的 commit 衝突，開工前先 `git pull`。
+- 結果僅為公開資料之統計，非投資建議。

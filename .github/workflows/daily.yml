@@ -1,0 +1,45 @@
+name: 籌碼力度每日選股
+
+on:
+  schedule:
+    # 週一到週五 台北時間 17:47（UTC 09:47）— 證交所法人資料約 16:30 前公布
+    - cron: "47 9 * * 1-5"
+  workflow_dispatch:        # 也可在 Actions 頁面手動按 Run
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chip-force-daily
+  cancel-in-progress: false
+
+jobs:
+  screen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 第一次會回抓約 60+ 個交易日（證交所限流，約 10–20 分鐘），之後每天只抓 1 天
+      - name: 三大法人 × 佔股本比
+        run: python chip_force.py --investor 三大法人
+      - name: 投信 × 佔股本比（投本比）
+        run: python chip_force.py --investor 投信 --mode 穩健
+
+      - name: 顯示在 Actions 摘要
+        if: always()
+        run: cat output/latest_三大法人.md output/latest_投信.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      # always()：就算回補到一半逾時／失敗，已抓好的快取也先存起來，下次接著跑
+      - name: 寫入結果
+        if: always()
+        run: |
+          git config user.name  "chip-force-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data output
+          git diff --cached --quiet || git commit -m "籌碼力度 $(TZ=Asia/Taipei date +%F)"
+          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git push
