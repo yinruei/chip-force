@@ -24,6 +24,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}   # 排隊的執行也取最新的分支頂端（含上一次執行 commit 的快取）
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -46,5 +48,5 @@ jobs:
           git config user.email "actions@users.noreply.github.com"
           git add data output
           git diff --cached --quiet || git commit -m "籌碼力度 $(TZ=Asia/Taipei date +%F)"
-          git pull --rebase origin "${GITHUB_REF_NAME}" || true
+          git pull --rebase -X theirs origin "${GITHUB_REF_NAME}"
           git push
