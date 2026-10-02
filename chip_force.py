@@ -242,8 +242,9 @@ def save_day(d: dt.date, rows: list[dict]) -> None:
         w.writerows(rows)
 
 
-def collect(n_days: int, end: dt.date, include_otc: bool, max_lookback: int = 400) -> list[tuple[dt.date, list[dict]]]:
-    """由 end 往回收集 n_days 個交易日（有快取就用快取）。"""
+def collect(n_days: int, end: dt.date, include_otc: bool, max_lookback: int = 600,
+            deadline: float | None = None) -> list[tuple[dt.date, list[dict]]]:
+    """由 end 往回收集 n_days 個交易日（有快取就用快取）。超過 deadline（time.time()）就不再抓新的日子。"""
     days: list[tuple[dt.date, list[dict]]] = []
     d = end
     for _ in range(max_lookback):
@@ -251,6 +252,9 @@ def collect(n_days: int, end: dt.date, include_otc: bool, max_lookback: int = 40
             break
         if d.weekday() < 5:
             rows = load_day(d)
+            if rows is None and deadline is not None and time.time() > deadline:
+                print("  ! 已達時間預算，停止回補更早的資料", file=sys.stderr)
+                break
             if rows is None:
                 print(f"抓取 {d} ...", file=sys.stderr)
                 rows = fetch_twse_day(d)

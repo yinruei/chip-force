@@ -1,0 +1,51 @@
+name: 籌碼力度回測
+
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "往回取幾個交易日的資料（250 約一年；前 61 日只用來暖機）"
+        required: false
+        default: "250"
+      budget_min:
+        description: "抓新資料的時間預算（分鐘）；用完就用現有資料回測，再按一次可接著回補"
+        required: false
+        default: "240"
+
+permissions:
+  contents: write
+
+# 與每日選股共用同一組，避免兩邊同時改 data/ 造成衝突
+concurrency:
+  group: chip-force-daily
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 回補資料並回測
+        run: python backtest.py --days ${{ inputs.days }} --budget-min ${{ inputs.budget_min }}
+
+      - name: 顯示在 Actions 摘要
+        if: always()
+        run: cat output/backtest.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      # always()：回補到一半被中斷時，已抓好的快取也先存起來
+      - name: 寫入結果
+        if: always()
+        run: |
+          git config user.name  "chip-force-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data output
+          git diff --cached --quiet || git commit -m "回測資料與報告 $(TZ=Asia/Taipei date +%F)"
+          git pull --rebase -X theirs origin "${GITHUB_REF_NAME}"
+          git push
