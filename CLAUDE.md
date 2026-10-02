@@ -23,12 +23,13 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 
 ## 參數（對應原指標 8 個參數）
 
-`--investor`（三大法人／外資／投信／自營）、`--window`（20/60/120）、`--k`（1.5/2.0/2.5）、`--confirm`（1/2/3）、`--mode`（靈敏／穩健）、`--min-ratio`、`--fast`（10/20/30）、`--slow`（40/60/120）。
+`--investor`（三大法人／外資／投信／自營）、`--window`（20/60/120）、`--k`（1.5/2.0/2.5）、`--confirm`（1/2/3）、`--mode`（靈敏／穩健）、`--min-ratio`、`--min-volume`（最低成交張數，預設 1000，0＝不篩）、`--fast`（10/20/30）、`--slow`（40/60/120）。
 
 ## 注意事項
 
 - 資料來源：證交所 T86、MI_QFIIS（上市）；櫃買中心（上櫃，選配，介面常改版，失敗時自動略過只跑上市）。證交所有限流，程式內已 `sleep`，不要拿掉。
 - 欄位以關鍵字比對（`_col`），證交所改欄位名時先檢查 `fetch_twse_day` / `fetch_tpex_day`。
+- 成交量只抓篩選當日，快取為 `data/vol_YYYYMMDD.csv`（兩市場都成功才寫入）；解析函式 `fetch_twse_volume` / `fetch_tpex_volume`，介面改版時先檢查這兩個。
 - 僅納入 4 碼普通股（`is_common_stock`）。
 - 快取、輸出都由 GitHub Actions 自動 commit；本機跑完若要保留結果再自行 commit，避免與 bot 的 commit 衝突，開工前先 `git pull`。
 - 結果僅為公開資料之統計，非投資建議。

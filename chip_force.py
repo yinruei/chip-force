@@ -159,6 +159,61 @@ def tpex_shares() -> dict[str, float]:
     return _TPEX_SHARES
 
 
+# ----------------------------------------------------------------- 成交量（只抓篩選當日）
+def fetch_twse_volume(d: dt.date) -> dict[str, float] | None:
+    """上市個股當日成交張數；失敗回傳 None。"""
+    js = _get_json(f"https://www.twse.com.tw/rwd/zh/afterTrading/MI_INDEX?date={d:%Y%m%d}&type=ALLBUT0999&response=json")
+    if not js or js.get("stat") != "OK":
+        return None
+    for t in js.get("tables") or []:
+        f = t.get("fields") or []
+        ic, iv = _col(f, "證券代號"), _col(f, "成交股數")
+        if ic is not None and iv is not None and t.get("data"):
+            return {str(r[ic]).strip(): _num(r[iv]) / 1000 for r in t["data"]}
+    return None
+
+
+def fetch_tpex_volume(d: dt.date) -> dict[str, float] | None:
+    """上櫃個股當日成交張數；介面改版時回傳 None。"""
+    js = _get_json(f"https://www.tpex.org.tw/www/zh-tw/afterTrading/dailyQuotes?date={d:%Y/%m/%d}&id=&response=json", retries=2)
+    for t in (js or {}).get("tables") or []:
+        f = t.get("fields") or []
+        ic, iv = _col(f, "代號"), _col(f, "成交股數")
+        if ic is not None and iv is not None and t.get("data"):
+            return {str(r[ic]).strip(): _num(r[iv]) / 1000 for r in t["data"]}
+    return None
+
+
+def load_volume(d: dt.date, include_otc: bool) -> tuple[dict[str, float], set[str]]:
+    """回傳 (代號→成交張數, 取得成功的市場)。兩個市場都成功才寫入快取。"""
+    p = CACHE / f"vol_{d:%Y%m%d}.csv"
+    if p.exists():
+        with p.open(encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        return {r["code"]: float(r["lots"]) for r in rows}, {r["market"] for r in rows}
+    vols: dict[str, float] = {}
+    ok: set[str] = set()
+    rows = []
+    for market, fn in (("上市", fetch_twse_volume), ("上櫃", fetch_tpex_volume)):
+        if market == "上櫃" and not include_otc:
+            continue
+        time.sleep(2)
+        v = fn(d)
+        if v is None:
+            print(f"  ! {d} {market}成交量抓取失敗，該市場不套用成交張數門檻", file=sys.stderr)
+            continue
+        ok.add(market)
+        vols.update(v)
+        rows += [{"code": c, "market": market, "lots": n} for c, n in v.items()]
+    if ok == ({"上市", "上櫃"} if include_otc else {"上市"}):
+        CACHE.mkdir(parents=True, exist_ok=True)
+        with p.open("w", encoding="utf-8", newline="") as fh:
+            w = csv.DictWriter(fh, fieldnames=["code", "market", "lots"])
+            w.writeheader()
+            w.writerows(rows)
+    return vols, ok
+
+
 # ----------------------------------------------------------------- 快取
 FIELDS = ["code", "name", "market", "外資", "投信", "自營", "三大法人", "shares"]
 
@@ -239,7 +294,8 @@ def is_common_stock(code: str) -> bool:
 
 
 def screen(days, investor: str, window: int, k: float, confirm: int,
-           mode: str, min_ratio: float, fast: int, slow: int):
+           mode: str, min_ratio: float, fast: int, slow: int,
+           volume: dict[str, float] | None = None, vol_markets: set[str] = frozenset(), min_volume: float = 0):
     dates = [d for d, _ in days]
     # 以最新一日的發行股數為準（股本變動時較貼近現況）；缺值時往前找
     series: dict[str, dict] = {}
@@ -283,8 +339,14 @@ def screen(days, investor: str, window: int, k: float, confirm: int,
         f_prev, s_prev = sma(ratio[:-1], fast), sma(ratio[:-1], slow)
         cross_up = None not in (f_now, s_now, f_prev, s_prev) and f_prev <= s_prev and f_now > s_now
 
+        # 成交張數門檻：只對成交量資料取得成功的市場套用；當日沒成交視為 0
+        lots = volume.get(code, 0.0) if volume is not None and s["market"] in vol_markets else None
+        if min_volume > 0 and lots is not None and lots < min_volume:
+            continue
+
         rec = {
             "代號": code, "名稱": s["name"], "市場": s["market"],
+            "成交張數": round(lots) if lots is not None else "",
             "法人買賣超(張)": round(s["net"][last] / 1000),
             "佔股本比(%)": round(r_today, 4),
             "力度z": round(z_today, 2),
@@ -316,7 +378,7 @@ def write_outputs(date: dt.date, picks, strengthen, args) -> Path:
     def table(rows, limit):
         if not rows:
             return "_（無）_\n"
-        cols = ["代號", "名稱", "市場", "法人買賣超(張)", "佔股本比(%)", "力度z", "買方轉強"]
+        cols = ["代號", "名稱", "市場", "成交張數", "法人買賣超(張)", "佔股本比(%)", "力度z", "買方轉強"]
         out = "| " + " | ".join(cols) + " |\n|" + "---|" * len(cols) + "\n"
         for r in rows[:limit]:
             out += "| " + " | ".join(str(r[c]) for c in cols) + " |\n"
@@ -328,7 +390,8 @@ def write_outputs(date: dt.date, picks, strengthen, args) -> Path:
         f"# 籌碼力度選股 {date:%Y-%m-%d}\n\n"
         f"條件：{args.investor} × 佔股本比，標準化視窗 {args.window} 日，"
         f"極端靈敏度 k={args.k}，確認 {args.confirm} 天，{args.mode}模式"
-        + (f"（佔股本比 ≥ {args.min_ratio}%）" if args.mode == "穩健" else "") + "\n\n"
+        + (f"（佔股本比 ≥ {args.min_ratio}%）" if args.mode == "穩健" else "")
+        + (f"，成交張數 ≥ {args.min_volume:g}" if args.min_volume > 0 else "") + "\n\n"
         f"## 顯著買超（{len(picks)} 檔，依力度 z 排序）\n\n{table(picks, args.top)}\n"
         f"## 買方轉強（快線上穿慢線、未達顯著門檻，{len(strengthen)} 檔）\n\n{table(strengthen, 20)}\n"
         "> 依公開法人買賣超資料之統計，非投資建議。\n"
@@ -347,6 +410,7 @@ def main() -> None:
     ap.add_argument("--confirm", type=int, choices=(1, 2, 3), default=1, help="訊號確認天數")
     ap.add_argument("--mode", choices=("靈敏", "穩健"), default="靈敏")
     ap.add_argument("--min-ratio", type=float, default=0.05, help="穩健模式的最低佔股本比(%%)")
+    ap.add_argument("--min-volume", type=float, default=1000, help="最低成交張數（當日），0＝不篩")
     ap.add_argument("--fast", type=int, choices=(10, 20, 30), default=20)
     ap.add_argument("--slow", type=int, choices=(40, 60, 120), default=60)
     ap.add_argument("--date", help="YYYY-MM-DD，預設今天")
@@ -360,8 +424,12 @@ def main() -> None:
     if len(days) < need:
         sys.exit(f"交易日資料不足（{len(days)}/{need}），請稍後重試。")
 
+    volume, vol_markets = None, set()
+    if args.min_volume > 0:
+        volume, vol_markets = load_volume(days[-1][0], include_otc=not args.no_otc)
     date, picks, strengthen = screen(days, args.investor, args.window, args.k, args.confirm,
-                                     args.mode, args.min_ratio, args.fast, args.slow)
+                                     args.mode, args.min_ratio, args.fast, args.slow,
+                                     volume, vol_markets, args.min_volume)
     p = write_outputs(date, picks, strengthen, args)
     print(p.read_text(encoding="utf-8"))
 
