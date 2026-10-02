@@ -36,6 +36,9 @@ jobs:
       - name: 投信 × 佔股本比（投本比）
         run: python chip_force.py --investor 投信 --mode 穩健 ${{ inputs.date && format('--date {0}', inputs.date) || '' }}
 
+      - name: 產生視覺化頁面
+        run: python build_dashboard.py
+
       - name: 顯示在 Actions 摘要
         if: always()
         run: cat output/latest_三大法人.md output/latest_投信.md >> "$GITHUB_STEP_SUMMARY" || true

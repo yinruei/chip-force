@@ -7,6 +7,7 @@
 - `chip_force.py` — 唯一程式，只用 Python 標準函式庫，無需安裝套件
 - `data/YYYYMMDD.csv` — 每日原始資料快取（全市場法人買賣超＋發行股數），**進版控**，換電腦不用重抓
 - `output/` — 每日結果：`latest_<法人>.md`、`YYYYMMDD_<法人>.md`、`YYYYMMDD_<法人>_顯著買超.csv`
+- `build_dashboard.py` + `dashboard_template.html` — 每天選股後由快取產生單檔視覺化頁面 `output/dashboard.html`（最近 5 個交易日、兩種法人）。改選股參數時，`build_dashboard.py` 的 `PARAMS`／`MODES` 要一起改。
 - 排程：`.github/workflows/daily.yml`（週一至週五台北 17:47，自動 commit 回 repo）
 
 ## 常用指令
