@@ -15,7 +15,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: chip-force-daily
+  group: chip-force-daily-run
   cancel-in-progress: false
 
 jobs:

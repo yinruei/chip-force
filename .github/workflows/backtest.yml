@@ -15,9 +15,9 @@ on:
 permissions:
   contents: write
 
-# 與每日選股共用同一組，避免兩邊同時改 data/ 造成衝突
+# 回測很久，不要擋住每日選股；兩邊推送時用 rebase -X theirs 合併 data/（同一天的快取內容相同）
 concurrency:
-  group: chip-force-daily
+  group: chip-force-backtest
   cancel-in-progress: false
 
 jobs:
