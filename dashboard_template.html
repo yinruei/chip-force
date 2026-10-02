@@ -34,8 +34,10 @@
   --focus: #6da7ec; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body { background: var(--bg); color: var(--ink); font-family: var(--font-ui); font-size: 14px; line-height: 1.55; padding-inline: 16px; padding-block: 20px 48px; }
 .wrap { max-width: 1080px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+.view { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 h1, h2, h3 { margin: 0; font-weight: 700; text-wrap: balance; }
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
@@ -114,6 +116,14 @@ footer { font-size: 12px; color: var(--ink-3); }
 #tip b { font-weight: 700; }
 #tip .num { font-size: 12px; }
 
+.note-list { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: var(--ink-2); font-size: 13px; max-width: 80ch; }
+.note-list b { color: var(--ink); font-weight: 500; }
+#btChart { width: 100%; display: block; }
+#btChart text { font-family: var(--font-num); font-size: 11px; fill: var(--ink-3); }
+#btChart .axt { font-family: var(--font-ui); fill: var(--ink-2); font-size: 12px; }
+#btChart .cat { font-family: var(--font-ui); fill: var(--ink); font-size: 12.5px; }
+.sig { color: var(--ink); font-weight: 700; }
+.neg { color: var(--ink-2); }
 @media (max-width: 860px) {
   .kpis { grid-template-columns: 1fr 1fr; }
   .kpi.hero, .kpis .kpi:last-child { grid-column: 1 / -1; }
@@ -133,11 +143,13 @@ footer { font-size: 12px; color: var(--ink-3); }
       <p id="subtitle"></p>
     </div>
     <div class="controls">
-      <div><span class="ctl-label">交易日</span><div class="seg" id="dateSeg" role="group" aria-label="交易日"></div></div>
+      <div id="viewWrap" hidden><span class="ctl-label">看什麼</span><div class="seg" id="viewSeg" role="group" aria-label="頁面"></div></div>
+      <div id="dateWrap"><span class="ctl-label">交易日</span><div class="seg" id="dateSeg" role="group" aria-label="交易日"></div></div>
       <div><span class="ctl-label">看哪個法人</span><div class="seg" id="invSeg" role="group" aria-label="法人"></div></div>
     </div>
   </header>
 
+  <div id="viewPick" class="view">
   <div class="cond" id="cond"></div>
 
   <section class="kpis" aria-label="摘要">
@@ -173,6 +185,32 @@ footer { font-size: 12px; color: var(--ink-3); }
       </table>
     </div>
   </section>
+  </div>
+
+  <div id="viewBt" class="view" hidden>
+    <div class="cond" id="btCond"></div>
+    <section class="panel">
+      <h2>訊號之後，比全市場多賺還是少賺？</h2>
+      <p class="hint">每根長條是「平均淨報酬 − 同期全市場基準」。實心表示統計上有差異（|t| ≥ 2），淡色表示和零沒有明顯差別。</p>
+      <div class="legend" id="btLegend"></div>
+      <svg id="btChart" role="img" aria-label="各持有天數的超額報酬長條圖，完整數字見下方表格"></svg>
+    </section>
+    <section class="panel">
+      <div class="tabs">
+        <div class="seg" id="hSeg" role="group" aria-label="持有天數"></div>
+      </div>
+      <div class="tbl-scroll">
+        <table>
+          <thead><tr id="btHead"></tr></thead>
+          <tbody id="btBody"></tbody>
+        </table>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>怎麼讀這份回測</h2>
+      <ul class="note-list" id="btNotes"></ul>
+    </section>
+  </div>
 
   <section class="method">
     <div><b>佔股本比</b> ＝ 法人買賣超 ÷ 發行股數。同樣買一萬張，小型股會被標出，大型股不會。</div>
@@ -191,7 +229,8 @@ const COLS = [
   ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["z", "力度 z"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
-const state = { date: dates[0], inv: "三大法人", list: "picks", sort: ["z", -1], q: "" };
+const state = { view: "pick", date: dates[0], inv: "三大法人", list: "picks", sort: ["z", -1], q: "", h: 20 };
+const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");
 const WD = "日一二三四五六";
@@ -211,8 +250,14 @@ function seg(el, items, key, onPick) {
 const cur = () => DATA.dates[state.date][state.inv];
 
 function render() {
+  $("viewWrap").hidden = !BT;
+  if (BT) seg($("viewSeg"), [["pick", "今日選股"], ["bt", "回測"]], "view", render);
+  $("viewPick").hidden = state.view !== "pick";
+  $("viewBt").hidden = state.view !== "bt";
+  $("dateWrap").hidden = state.view !== "pick";
   seg($("dateSeg"), dates.map(d => [d, dlabel(d)]), "date", render);
   seg($("invSeg"), INV, "inv", render);
+  if (state.view === "bt") { $("subtitle").textContent = "把每天的訊號買進、持有幾天後賣出，和同一天全市場的平均比較。這是歷史統計，不代表未來。"; renderBt(); return; }
   const e = cur();
   $("subtitle").textContent = `${dlong(state.date)} 收盤後，全市場上市櫃普通股。找出法人買超力道在過去 60 日裡明顯偏高的股票。`;
   $("cond").innerHTML = [
@@ -315,6 +360,71 @@ function renderTable(e) {
   $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num">${r.c}</td><td>${r.n}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.z.toFixed(2)}<span class="zbar" style="width:${Math.max(2, Math.min(60, r.z / zmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="8" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
-let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => renderScatter(cur()), 120); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); }, 120); });
+
+/* ---- 回測 ---- */
+const BT_GROUPS = [["顯著買超", "var(--s1)"], ["買方轉強", "var(--s2)"]];
+const BT_H = [1, 5, 10, 20];
+const btRow = (inv, g, h) => BT.rows.find(r => r.inv === inv && r.group === g && r.h === h);
+const sgn = v => (v > 0 ? "+" : "") + v.toFixed(2);
+function btTip(r) {
+  return `<b>${r.inv}・${r.group}・持有 ${r.h} 日</b><br><span class="num">${fmt(r.n)} 筆・${r.days} 個訊號日<br>淨報酬 ${sgn(r.net)}%（基準 ${sgn(r.bench)}%）<br>超額 ${sgn(r.excess)}%・t ${r.t === null ? "—" : r.t.toFixed(2)}<br>勝率 ${r.win.toFixed(1)}%・中位數 ${sgn(r.median)}%</span>`;
+}
+function renderBt() {
+  const m = BT.meta;
+  $("btCond").innerHTML = [`回測期間 <b class="num">${m.first}</b> ～ <b class="num">${m.last}</b>`, `<b class="num">${m.signal_days}</b> 個訊號日`,
+    "訊號隔日開盤買進，持有 N 日收盤賣出", `每筆扣成本 <b class="num">${m.cost}</b>%`, `成交張數 ≥ <b class="num">${fmt(+m.min_volume)}</b>`].map(t => `<span>${t}</span>`).join("");
+  seg($("hSeg"), BT_H.map(h => [h, `持有 ${h} 日`]), "h", renderBt);
+  renderBtChart();
+  const head = $("btHead"); head.innerHTML = ["組別", "筆數", "訊號日", "平均淨報酬%", "中位數%", "勝率%", "基準%", "超額%", "t 值"].map(t => `<th>${t}</th>`).join("");
+  const rows = BT.rows.filter(r => r.inv === state.inv && r.h === state.h);
+  $("btBody").innerHTML = rows.map(r => {
+    const sig = r.t !== null && Math.abs(r.t) >= 2;
+    return `<tr><td>${r.group}</td><td class="num">${fmt(r.n)}</td><td class="num">${r.days}</td><td class="num">${sgn(r.net)}</td><td class="num">${sgn(r.median)}</td><td class="num">${r.win.toFixed(1)}</td><td class="num">${sgn(r.bench)}</td><td class="num ${sig ? "sig" : ""}">${sgn(r.excess)}</td><td class="num ${sig ? "sig" : "neg"}">${r.t === null ? "—" : r.t.toFixed(2)}</td></tr>`;
+  }).join("");
+  const top = BT.rows.filter(r => r.group === "顯著買超" || r.group === "買方轉強");
+  const all = BT.rows, expect = (all.length * 0.05).toFixed(1);
+  const posSig = all.filter(r => r.t !== null && r.t >= 2), negSig = all.filter(r => r.t !== null && r.t <= -2);
+  const cost = +m.cost;
+  $("btNotes").innerHTML = [
+    `<b>超額</b>是平均淨報酬減去同期全市場基準，已扣來回成本 ${cost}%。扣成本之前，訊號本身和全市場的差距要比表上的超額多約 ${cost} 個百分點。`,
+    `<b>t 值</b>看差距是不是比隨機波動大，絕對值 2 以上才算有差別。這裡持有期互相重疊，真正的 t 值會比表上小。`,
+    `<b>多重比較</b>：表裡共 ${all.length} 格，就算完全沒有效果，也預期約 ${expect} 格會 |t| ≥ 2。實際 t ≥ 2 的有 ${posSig.length} 格${posSig.length ? "（" + posSig.map(r => `${r.inv}・${r.group}・${r.h} 日`).join("、") + "）" : ""}，t ≤ −2 的有 ${negSig.length} 格。`,
+    `<b>中位數常為負</b>，勝率多半低於五成：平均報酬是由少數大漲的股票拉上來的。`,
+    `<b>限制</b>：股價沒有還原，除權息日會被當成虧損（基準也受影響）；同一檔連續出訊號會重複計入；沒有考慮漲停買不到與滑價；只涵蓋 ${m.first.slice(0, 7)} 到 ${m.last.slice(0, 7)} 這一段行情。`
+  ].map(t => `<li>${t}</li>`).join("");
+}
+function renderBtChart() {
+  const svg = $("btChart"), W = Math.max(280, svg.parentElement.clientWidth - 2), H = 300, m = { l: 48, r: 10, t: 12, b: 44 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+  $("btLegend").innerHTML = BT_GROUPS.map(([g, c]) => `<span><svg viewBox="0 0 12 12"><rect width="12" height="12" rx="2" fill="${c}"/></svg>${g}</span>`).join("") +
+    `<span><svg viewBox="0 0 12 12"><rect x=".75" y=".75" width="10.5" height="10.5" rx="2" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/></svg>淡色＝不顯著（|t| &lt; 2）</span>`;
+  const vals = BT_H.flatMap(h => BT_GROUPS.map(([g]) => btRow(state.inv, g, h))).filter(Boolean).map(r => r.excess);
+  let lo = Math.min(0, ...vals), hi = Math.max(0, ...vals);
+  const step = (hi - lo) > 8 ? 2 : (hi - lo) > 4 ? 1 : 0.5;
+  lo = Math.floor(lo / step) * step - 0; hi = Math.ceil(hi / step) * step;
+  const Y = v => m.t + (hi - v) / (hi - lo) * (H - m.t - m.b);
+  let s = "";
+  for (let t = lo; t <= hi + 1e-9; t += step) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="${Math.abs(t) < 1e-9 ? "var(--ink-2)" : "var(--grid)"}"/><text x="${m.l - 6}" y="${Y(t) + 4}" text-anchor="end">${t > 0 ? "+" : ""}${+t.toFixed(1)}</text>`;
+  s += `<text class="axt" transform="translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)" text-anchor="middle" style="font-family:var(--font-ui)">超額報酬（%）</text>`;
+  const gw = (W - m.l - m.r) / BT_H.length, bw = Math.min(46, gw / 3), items = [];
+  BT_H.forEach((h, i) => {
+    const cx = m.l + gw * (i + .5);
+    s += `<text class="cat" x="${cx}" y="${H - 22}" text-anchor="middle" style="font-family:var(--font-ui)">持有 ${h} 日</text>`;
+    BT_GROUPS.forEach(([g, col], j) => {
+      const r = btRow(state.inv, g, h); if (!r) return;
+      const x = cx + (j - 1) * (bw + 3) + 1.5, y0 = Y(0), y1 = Y(r.excess), sig = r.t !== null && Math.abs(r.t) >= 2;
+      const top = Math.min(y0, y1), hgt = Math.max(1.5, Math.abs(y1 - y0));
+      s += `<g class="bt" data-k="${items.length}" tabindex="0" style="outline:none"><rect x="${x}" y="${top}" width="${bw}" height="${hgt}" rx="2" fill="${col}" fill-opacity="${sig ? 1 : .32}" stroke="${col}" stroke-width="${sig ? 0 : 1.5}"/><rect x="${x - 4}" y="${m.t}" width="${bw + 8}" height="${H - m.t - m.b}" fill="transparent"/></g>`;
+      s += `<text x="${x + bw / 2}" y="${r.excess >= 0 ? top - 4 : top + hgt + 12}" text-anchor="middle" style="fill:var(--ink-2)">${sgn(r.excess)}</text>`;
+      items.push(r);
+    });
+  });
+  svg.innerHTML = s;
+  svg.querySelectorAll(".bt").forEach(g => {
+    const r = items[+g.dataset.k], ev = e => { const b = g.getBoundingClientRect(); showTip(btTip(r), e.clientX || b.right, e.clientY || b.top); };
+    g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
+  });
+}
 render();
 </script>

@@ -46,6 +46,9 @@ def main() -> None:
         out["dates"][ds] = entry
     if not out["dates"]:
         sys.exit("沒有可用的日期，未產生頁面。")
+    bt = c.OUT / "backtest_summary.json"
+    if bt.exists():
+        out["backtest"] = json.loads(bt.read_text(encoding="utf-8"))
     html = (HERE / "dashboard_template.html").read_text(encoding="utf-8")
     now = dt.datetime.now(c.TZ).strftime("%Y-%m-%d %H:%M")
     html = html.replace("__DATA__", json.dumps(out, ensure_ascii=False, separators=(",", ":"))).replace("__UPDATED__", now)

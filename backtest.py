@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime as dt
+import json
 import math
 import statistics
 import sys
@@ -188,11 +189,21 @@ def write_report(rows, trades, meta, out_dir: Path) -> Path:
     md.append("> 歷史統計不保證未來表現，非投資建議。")
     p = out_dir / "backtest.md"
     p.write_text("\n".join(md), encoding="utf-8")
+    summary = {"meta": {k: str(v) for k, v in meta.items()}, "rows": rows}
+    (out_dir / "backtest_summary.json").write_text(json.dumps(summary, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return p
+
+
+def load_trades_csv(path: Path):
+    with path.open(encoding="utf-8-sig") as fh:
+        return [{"date": r["訊號日"], "inv": r["法人"], "group": r["組別"], "code": r["代號"], "name": r["名稱"],
+                 "z": float(r["力度z"]), "h": int(r["持有天數"]), "gross": float(r["毛報酬%"]),
+                 "net": float(r["淨報酬%"]), "bench": float(r["同期基準%"])} for r in csv.DictReader(fh)]
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="籌碼力度回測")
+    ap.add_argument("--report-only", action="store_true", help="不抓資料，直接用 output/backtest_trades.csv 重做報告與摘要")
     ap.add_argument("--days", type=int, default=250, help="往回取幾個交易日的資料")
     ap.add_argument("--end", help="YYYY-MM-DD，預設今天")
     ap.add_argument("--budget-min", type=float, default=200, help="抓新資料的時間預算（分鐘），超過就用現有的資料回測")
@@ -200,6 +211,13 @@ def main() -> None:
     ap.add_argument("--cost", type=float, default=0.585, help="來回交易成本(%%)")
     args = ap.parse_args()
 
+    if args.report_only:
+        trades = load_trades_csv(c.OUT / "backtest_trades.csv")
+        sig_days = sorted({t["date"] for t in trades})
+        meta = {"first": sig_days[0], "last": sig_days[-1], "signal_days": len(sig_days), "window": 60, "k": 2.0,
+                "min_volume": args.min_volume, "min_ratio": 0.05, "cost": args.cost}
+        print(write_report(summarize(trades), trades, meta, c.OUT))
+        return
     end = dt.date.fromisoformat(args.end) if args.end else dt.datetime.now(c.TZ).date()
     deadline = time.time() + args.budget_min * 60
     days = c.collect(args.days, end, include_otc=True, deadline=deadline)
