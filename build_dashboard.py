@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-由快取資料產生單檔視覺化頁面 output/dashboard.html（內含最近 5 個交易日、兩種法人的結果）。
+由快取資料產生單檔視覺化頁面 output/dashboard.html（內含最近 10 個交易日、兩種法人的結果）。
 只讀 data/ 的快取，不連網；每天排程跑完選股後執行。
 參數須與 daily.yml 的選股參數一致（三大法人＝靈敏、投信＝穩健）。
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 import chip_force as c
 
 HERE = Path(__file__).resolve().parent
-KEEP_DAYS = 5
+KEEP_DAYS = 10
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"三大法人": "靈敏", "投信": "穩健"}
 
