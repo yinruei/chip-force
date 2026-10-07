@@ -9,7 +9,7 @@
 - `output/` — 每日結果：`latest_<法人>.md`、`YYYYMMDD_<法人>.md`、`YYYYMMDD_<法人>_顯著買超.csv`
 - `build_dashboard.py` + `dashboard_template.html` — 每天選股後由快取產生單檔視覺化頁面 `output/dashboard.html`（最近 10 個交易日、兩種法人）。改選股參數時，`build_dashboard.py` 的 `PARAMS`／`MODES` 要一起改。
 - `backtest.py` — 回測（訊號隔日開盤進場、持有 1/5/10/20 日收盤出場，扣來回成本，對照同日全市場等權基準）。價量快取 `data/px_YYYYMMDD.csv`；由手動 workflow `.github/workflows/backtest.yml` 執行，報告在 `output/backtest.md`、逐筆在 `output/backtest_trades.csv`、彙總在 `output/backtest_summary.json`（`python backtest.py --report-only` 可不連網重做報告）。`build_dashboard.py` 會把彙總放進視覺化頁面的「回測」分頁。回補有時間預算，中斷後再按一次會接著抓。
-- 自動化：GitHub 的 cron 常延遲 6–9 小時，所以 `daily.yml` 排了每小時一次（台北 17:47–23:47），當天已完成就自動略過。Claude 的「籌碼力度頁面每日更新」排程（台北 19:33／23:33，另有週二到週六 08:33 補跑）只負責把 `output/dashboard.html` 重新發佈到 Artifact：repo 裡最新交易日比 Artifact 上新才發佈。Claude 的排程沒有權限觸發 workflow 或 push，所以選股要靠 GitHub 的 cron。
+- 自動化：GitHub 的 cron 常延遲 6–9 小時，所以 `daily.yml` 排了每小時一次（台北 17:47–23:47），當天已完成就自動略過。Claude 的「籌碼力度頁面每日更新」排程（週一到週五台北 19:33、23:33）只負責把 `output/dashboard.html` 重新發佈到 Artifact：repo 裡最新交易日比 Artifact 上新才發佈。Claude 的排程沒有權限觸發 workflow 或 push，所以選股要靠 GitHub 的 cron。
 - 排程：`.github/workflows/daily.yml`（週一至週五台北 17:47，自動 commit 回 repo）
 
 ## 常用指令
