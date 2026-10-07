@@ -7,6 +7,10 @@ on:
     - cron: "47 9 * * 1-5"
     - cron: "17 11 * * 1-5"
     - cron: "7 13 * * 1-5"
+  push:
+    # 推送 trigger/run 就會立刻跑一次（Claude 的每日更新排程用這個，不必等 GitHub 延遲的 cron）
+    paths:
+      - "trigger/run"
   workflow_dispatch:        # 也可在 Actions 頁面手動按 Run
     inputs:
       date:
