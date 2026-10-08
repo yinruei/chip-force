@@ -37,17 +37,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      # 排程觸發、且今天（台北日期）已經有結果就略過，避免一天三次都重做又多出無意義的 commit
-      - name: 檢查今天是否已完成
+      # 排程觸發時，若「應該已有資料的最近交易日」已經做過就略過（台北 16:00 前算前一個工作日），
+      # 避免延遲到半夜的 cron 重做一次、多出無意義的 commit
+      - name: 檢查是否已完成
         id: chk
         run: |
-          T=$(TZ=Asia/Taipei date +%Y%m%d)
+          T=$(python -c "import datetime as d;n=d.datetime.now(d.timezone(d.timedelta(hours=8)));t=n.date()-d.timedelta(days=0 if n.hour>=16 else 1)
+          while t.weekday()>4: t-=d.timedelta(days=1)
+          print(t.strftime('%Y%m%d'))")
+          echo "應有資料的交易日：$T"
           if [ "${{ github.event_name }}" = "schedule" ] && [ -s "data/vol_$T.csv" ] && [ -f "output/${T}_三大法人.md" ]; then
-            echo "done=true" >> "$GITHUB_OUTPUT"; echo "今天（$T）已完成，略過"
+            echo "done=true" >> "$GITHUB_OUTPUT"; echo "已完成，略過"
           fi
 
-      # 第一次會回抓約 60+ 個交易日（證交所限流，約 10–20 分鐘），之後每天只抓 1 天
-      # 指定了日期就逐日各跑一次，最後再跑一次「今天」，讓 latest_*.md 維持最新一天
       - name: 三大法人 × 佔股本比
         if: steps.chk.outputs.done != 'true'
         env:
