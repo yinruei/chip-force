@@ -47,6 +47,8 @@ header { display: flex; flex-wrap: wrap; justify-content: space-between; align-i
 .controls { display: flex; flex-wrap: wrap; gap: 10px 16px; }
 .seg { display: inline-flex; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
 .seg button { font: inherit; font-size: 13px; color: var(--ink-2); background: transparent; border: 0; padding: 5px 12px; border-radius: 6px; cursor: pointer; }
+.seg button.more { color: var(--ink-3); border: 1px dashed var(--line); }
+.seg button.more:hover { color: var(--ink); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); font-weight: 500; }
 button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .ctl-label { display: block; font-size: 11px; letter-spacing: .08em; color: var(--ink-3); margin-bottom: 4px; }
@@ -229,12 +231,13 @@ const COLS = [
   ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["z", "力度 z"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
-const state = { view: "pick", date: dates[0], inv: "三大法人", list: "picks", sort: ["z", -1], q: "", h: 20 };
+const SHOW_STEP = 10;
+const state = { shown: SHOW_STEP, view: "pick", date: dates[0], inv: "三大法人", list: "picks", sort: ["z", -1], q: "", h: 20 };
 const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");
 const WD = "日一二三四五六";
-const dlabel = d => { const dd = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6)); return `${+d.slice(4, 6)}/${+d.slice(6)}（${WD[dd.getDay()]}）`; };
+const dlabel = d => { const dd = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6)); return `${d.slice(0, 4) !== dates[0].slice(0, 4) ? d.slice(0, 4) + "/" : ""}${+d.slice(4, 6)}/${+d.slice(6)}（${WD[dd.getDay()]}）`; };
 const dlong = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
 const MODE = { "三大法人": "靈敏", "投信": "穩健" };
 
@@ -249,13 +252,31 @@ function seg(el, items, key, onPick) {
 }
 const cur = () => DATA.dates[state.date][state.inv];
 
+/* 交易日：預設只顯示最近 10 天，按「更早」每次再多展開 10 天 */
+function renderDates() {
+  const box = $("dateSeg"); box.innerHTML = "";
+  if (!dates.includes(state.date)) state.date = dates[0];
+  // 選到的日子一定要看得到
+  state.shown = Math.max(state.shown, Math.ceil((dates.indexOf(state.date) + 1) / SHOW_STEP) * SHOW_STEP);
+  dates.slice(0, state.shown).forEach(d => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = dlabel(d); b.setAttribute("aria-pressed", String(state.date === d));
+    b.onclick = () => { state.date = d; render(); };
+    box.appendChild(b);
+  });
+  const left = dates.length - state.shown;
+  const more = (label, fn) => { const b = document.createElement("button"); b.type = "button"; b.className = "more"; b.textContent = label; b.onclick = fn; box.appendChild(b); };
+  if (left > 0) more(`更早 ▾（還有 ${left} 天）`, () => { state.shown += SHOW_STEP; renderDates(); });
+  if (state.shown > SHOW_STEP) more("收合 ▴", () => { state.shown = SHOW_STEP; if (dates.indexOf(state.date) >= SHOW_STEP) state.date = dates[0]; render(); });
+}
+
 function render() {
   $("viewWrap").hidden = !BT;
   if (BT) seg($("viewSeg"), [["pick", "今日選股"], ["bt", "回測"]], "view", render);
   $("viewPick").hidden = state.view !== "pick";
   $("viewBt").hidden = state.view !== "bt";
   $("dateWrap").hidden = state.view !== "pick";
-  seg($("dateSeg"), dates.map(d => [d, dlabel(d)]), "date", render);
+  renderDates();
   seg($("invSeg"), INV, "inv", render);
   if (state.view === "bt") { $("subtitle").textContent = "把每天的訊號買進、持有幾天後賣出，和同一天全市場的平均比較。這是歷史統計，不代表未來。"; renderBt(); return; }
   const e = cur();

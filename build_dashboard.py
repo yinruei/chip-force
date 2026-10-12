@@ -6,15 +6,17 @@
 """
 from __future__ import annotations
 
+import csv
 import datetime as dt
 import json
 import sys
+import time
 from pathlib import Path
 
 import chip_force as c
 
 HERE = Path(__file__).resolve().parent
-KEEP_DAYS = 10
+KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"三大法人": "靈敏", "投信": "穩健"}
 
@@ -24,18 +26,34 @@ def row(r: dict) -> dict:
             "r": r["佔股本比(%)"], "z": r["力度z"], "x": bool(r["買方轉強"])}
 
 
+def load_volume_cached(d: dt.date):
+    """只讀快取：先用 vol_，沒有就用回測抓的 px_（同一份成交張數）。"""
+    if (c.CACHE / f"vol_{d:%Y%m%d}.csv").exists():
+        return c.load_volume(d, include_otc=True)
+    f = c.CACHE / f"px_{d:%Y%m%d}.csv"
+    if not f.exists():
+        return {}, set()
+    with f.open(encoding="utf-8") as fh:
+        rows = list(csv.DictReader(fh))
+    return {r["code"]: float(r["lots"]) for r in rows}, {r["market"] for r in rows}
+
+
 def main() -> None:
     p = PARAMS
     need = max(p["window"], p["slow"]) + p["confirm"] + 1
-    vol_dates = sorted(f.stem[4:] for f in c.CACHE.glob("vol_*.csv"))[-KEEP_DAYS:]
+    # 有成交量資料的日子 = 有 vol_ 快取（選股當天抓的）或 px_ 快取（回測抓的價量）
+    have = {f.stem.split("_", 1)[1] for pat in ("vol_*.csv", "px_*.csv") for f in c.CACHE.glob(pat)}
     out = {"params": p, "dates": {}}
-    for ds in vol_dates:
+    for ds in sorted(have)[-KEEP_DAYS:]:
         d = dt.date(int(ds[:4]), int(ds[4:6]), int(ds[6:]))
-        days = c.collect(need, d, include_otc=True)
+        # deadline 設成過去 = 只讀快取、不連網；缺資料的日子就略過
+        days = c.collect(need, d, include_otc=True, deadline=time.time() - 1)
         if len(days) < need or days[-1][0] != d:
             print(f"略過 {d}：快取的交易日資料不足", file=sys.stderr)
             continue
-        vol, markets = c.load_volume(d, include_otc=True)
+        vol, markets = load_volume_cached(d)
+        if not vol:
+            continue
         entry = {}
         for inv, mode in MODES.items():
             _, picks, strong = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, p["min_ratio"],
