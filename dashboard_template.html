@@ -226,13 +226,13 @@ footer { font-size: 12px; color: var(--ink-3); }
 <script>
 const DATA = __DATA__;
 const P = DATA.params;
-const INV = [["三大法人", "三大法人"], ["投信", "投信（投本比）"]];
+const INV = [["投信", "投信（投本比）"], ["三大法人", "三大法人"]];
 const COLS = [
   ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["z", "力度 z"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
-const state = { shown: SHOW_STEP, view: "pick", date: dates[0], inv: "三大法人", list: "picks", sort: ["z", -1], q: "", h: 20 };
+const state = { shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["z", -1], q: "", h: 20 };
 const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");

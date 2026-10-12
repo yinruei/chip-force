@@ -16,6 +16,7 @@ from pathlib import Path
 import chip_force as c
 
 HERE = Path(__file__).resolve().parent
+SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/backtest_summary.json 放回頁面
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"三大法人": "靈敏", "投信": "穩健"}
@@ -65,7 +66,7 @@ def main() -> None:
     if not out["dates"]:
         sys.exit("沒有可用的日期，未產生頁面。")
     bt = c.OUT / "backtest_summary.json"
-    if bt.exists():
+    if SHOW_BACKTEST and bt.exists():
         out["backtest"] = json.loads(bt.read_text(encoding="utf-8"))
     html = (HERE / "dashboard_template.html").read_text(encoding="utf-8")
     now = dt.datetime.now(c.TZ).strftime("%Y-%m-%d %H:%M")
