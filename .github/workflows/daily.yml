@@ -71,6 +71,16 @@ jobs:
         if: steps.chk.outputs.done != 'true'
         run: python build_dashboard.py
 
+      # 把頁面上半部截成 PNG（output/screenshots/latest_投信.png 等），方便貼到 Skool；失敗不影響其他步驟
+      - name: 產生 Skool 用截圖
+        if: steps.chk.outputs.done != 'true'
+        continue-on-error: true
+        run: |
+          pip install -q playwright==1.48.0
+          python -m playwright install --with-deps chromium > /dev/null
+          sudo apt-get install -y -qq fonts-noto-cjk > /dev/null
+          python screenshot.py
+
       - name: 顯示在 Actions 摘要
         if: always() && steps.chk.outputs.done != 'true'
         run: cat output/latest_三大法人.md output/latest_投信.md >> "$GITHUB_STEP_SUMMARY" || true
