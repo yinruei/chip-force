@@ -38,6 +38,8 @@ jobs:
       - name: 準備 KV 並部署 Worker
         working-directory: site
         run: |
+          export CLOUDFLARE_ACCOUNT_ID=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
+          export CLOUDFLARE_API_TOKEN=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
           ID=$(bash kv_id.sh)
           sed -i "s/__SITE_KV_ID__/${ID}/" wrangler.toml
           npx -y wrangler@4 deploy
@@ -51,11 +53,13 @@ jobs:
           ADMIN_EMAIL: ${{ secrets.SITE_ADMIN_EMAIL }}
           MAIL_FROM: ${{ secrets.SITE_MAIL_FROM }}
         run: |
+          export CLOUDFLARE_ACCOUNT_ID=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
+          export CLOUDFLARE_API_TOKEN=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
           python3 - > secrets.json <<'PY'
           import json, os
-          s = {"SITE_SECRET": os.environ["SITE_SECRET"], "ADMIN_PASSWORD": os.environ["SITE_ADMIN_PASSWORD"]}
+          s = {"SITE_SECRET": os.environ["SITE_SECRET"].strip(), "ADMIN_PASSWORD": os.environ["SITE_ADMIN_PASSWORD"].strip()}
           for k in ("RESEND_API_KEY", "ADMIN_EMAIL", "MAIL_FROM"):
-              if os.environ.get(k): s[k] = os.environ[k]
+              if os.environ.get(k, "").strip(): s[k] = os.environ[k].strip()
           print(json.dumps(s))
           PY
           npx -y wrangler@4 secret bulk secrets.json
