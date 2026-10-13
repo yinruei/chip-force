@@ -1,0 +1,65 @@
+name: 部署會員網站
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: chip-force-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 檢查必要的 secrets
+        env:
+          SITE_SECRET: ${{ secrets.SITE_SECRET }}
+          SITE_ADMIN_PASSWORD: ${{ secrets.SITE_ADMIN_PASSWORD }}
+        run: |
+          miss=""
+          for v in CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID SITE_SECRET SITE_ADMIN_PASSWORD; do
+            [ -n "${!v}" ] || miss="$miss $v"
+          done
+          if [ -n "$miss" ]; then echo "::error::缺少 repo secrets：$miss（Settings → Secrets and variables → Actions）"; exit 1; fi
+
+      - name: 準備 KV 並部署 Worker
+        working-directory: site
+        run: |
+          ID=$(bash kv_id.sh)
+          sed -i "s/__SITE_KV_ID__/${ID}/" wrangler.toml
+          npx -y wrangler@4 deploy
+
+      - name: 設定 Worker 的 secrets
+        working-directory: site
+        env:
+          SITE_SECRET: ${{ secrets.SITE_SECRET }}
+          SITE_ADMIN_PASSWORD: ${{ secrets.SITE_ADMIN_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          ADMIN_EMAIL: ${{ secrets.SITE_ADMIN_EMAIL }}
+          MAIL_FROM: ${{ secrets.SITE_MAIL_FROM }}
+        run: |
+          python3 - > secrets.json <<'PY'
+          import json, os
+          s = {"SITE_SECRET": os.environ["SITE_SECRET"], "ADMIN_PASSWORD": os.environ["SITE_ADMIN_PASSWORD"]}
+          for k in ("RESEND_API_KEY", "ADMIN_EMAIL", "MAIL_FROM"):
+              if os.environ.get(k): s[k] = os.environ[k]
+          print(json.dumps(s))
+          PY
+          npx -y wrangler@4 secret bulk secrets.json
+          rm secrets.json
+
+      - name: 上傳目前的頁面
+        run: bash site/upload.sh

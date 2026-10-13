@@ -29,6 +29,9 @@ jobs:
   screen:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,6 +73,12 @@ jobs:
       - name: 產生視覺化頁面
         if: steps.chk.outputs.done != 'true'
         run: python build_dashboard.py
+
+      # 有設定 Cloudflare secrets 才上傳到會員網站；失敗不影響其他步驟
+      - name: 上傳到會員網站
+        if: steps.chk.outputs.done != 'true' && env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        run: bash site/upload.sh
 
       # 把頁面上半部截成 PNG（output/screenshots/latest_投信.png 等），方便貼到 Skool；失敗不影響其他步驟
       - name: 產生 Skool 用截圖

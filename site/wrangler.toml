@@ -1,0 +1,8 @@
+# 籌碼力度選股會員網站。KV 的 id 由 .github/workflows/site.yml 在部署時自動建立並填入，這裡不用改。
+name = "chip-force-site"
+main = "worker.js"
+compatibility_date = "2026-09-01"
+
+[[kv_namespaces]]
+binding = "SITE_KV"
+id = "__SITE_KV_ID__"
