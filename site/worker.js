@@ -179,7 +179,7 @@ const statusPage = (title, text, email) =>
   page(title, `<h1>${esc(title)}</h1><p>${esc(text)}</p><p class="small" style="margin-top:16px">${esc(email)}・<a href="/logout">登出</a></p>`);
 
 // ---------- 會員端 ----------
-async function handleRegister(req, env, ip) {
+async function handleRegister(req, env, ip, origin) {
   const f = await req.formData();
   const email = normEmail(f.get("email")), password = String(f.get("password") || ""), code = normCode(f.get("code"));
   if (await tooMany(env, `reg:${ip}`)) return registerPage("嘗試次數太多，請 15 分鐘後再試。", email);
@@ -192,24 +192,28 @@ async function handleRegister(req, env, ip) {
   if (await getUser(env, email)) return registerPage("這個 email 已經註冊過，請直接登入。", email);
   const { salt, hash } = await hashPassword(password);
   await putUser(env, { email, salt, hash, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
-  await notifyAdmin(env, email);
+  await notifyAdmin(env, email, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和密碼登入即可。</p><p><a href="/login">回登入頁</a></p>`);
 }
 
-async function notifyAdmin(env, email) {
+async function notifyAdmin(env, email, origin) {
   if (!env.RESEND_API_KEY || !env.ADMIN_EMAIL) return;
+  const when = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   try {
-    await fetch("https://api.resend.com/emails", {
+    const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
       body: JSON.stringify({
         from: env.MAIL_FROM || "籌碼力度選股 <onboarding@resend.dev>",
         to: [env.ADMIN_EMAIL],
         subject: `新會員待核准：${email}`,
-        text: `${email} 剛註冊籌碼力度選股，請到 Skool 確認是付費會員後，在管理頁核准：/admin`,
+        text: `${email} 在 ${when}（台北時間）註冊了籌碼力度選股。\n\n請先到 Skool 確認這個 email 是付費會員，再到管理頁核准：\n${origin}/admin\n`,
       }),
     });
-  } catch (e) { /* 通知失敗不影響註冊 */ }
+    if (!r.ok) console.log("通知信寄送失敗", r.status, await r.text());
+  } catch (e) {
+    console.log("通知信寄送失敗", String(e)); // 通知失敗不影響註冊
+  }
 }
 
 async function handleLogin(req, env, ip) {
@@ -352,7 +356,7 @@ export default {
       return adminHome(env);
     }
 
-    if (path === "/register") return req.method === "POST" ? handleRegister(req, env, ip) : registerPage();
+    if (path === "/register") return req.method === "POST" ? handleRegister(req, env, ip, url.origin) : registerPage();
     if (path === "/login") {
       if (req.method === "POST") return handleLogin(req, env, ip);
       return loginPage("", url.searchParams.get("m") === "out" ? "已登出。" : "");

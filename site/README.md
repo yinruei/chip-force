@@ -19,6 +19,8 @@ Skool 付費會員專屬的籌碼力度頁面。網址：`https://chip-force-sit
 | `CLOUDFLARE_ACCOUNT_ID` | 跟 money-goals 同一個 |
 | `SITE_SECRET` | 一長串隨機字（用來產生每月驗證碼；改掉會讓驗證碼全部改變） |
 | `SITE_ADMIN_PASSWORD` | 管理頁 `/admin` 的密碼 |
-| `RESEND_API_KEY`、`SITE_ADMIN_EMAIL`、`SITE_MAIL_FROM` | 選填：有人註冊時寄信通知管理者 |
+| `RESEND_API_KEY` | 選填：Resend 的 API key，有人註冊時寄信通知管理者 |
+| `SITE_ADMIN_EMAIL` | 選填：收通知的 email。Resend 沒有驗證網域時，只能寄到你註冊 Resend 的那個 email |
+| `SITE_MAIL_FROM` | 選填：寄件人，例如 `籌碼力度選股 <noreply@你的網域>`；沒有驗證網域就不要設（會用 onboarding@resend.dev） |
 
-設好後到 Actions 執行「部署會員網站」。之後每天的選股跑完會自動把新頁面上傳。
+設好或修改 secrets 後，都要到 Actions 執行一次「部署會員網站」才會生效。之後每天的選股跑完會自動把新頁面上傳。
