@@ -13,15 +13,24 @@
 //   admin:<id>     管理者登入（12 小時）
 //   rl:<key>       失敗次數（防暴力破解）
 //   dashboard      頁面 HTML（由 GitHub Actions 每天上傳）
+//   rst:<token>    重設密碼連結（自助 1 小時、管理者產生 24 小時）
 //
 // Secrets：SITE_SECRET（產生每月驗證碼）、ADMIN_PASSWORD（管理頁密碼）
-// 選填：RESEND_API_KEY + ADMIN_EMAIL + MAIL_FROM（有人註冊時寄信通知管理者）
+// 選填：RESEND_API_KEY + ADMIN_EMAIL（有人註冊時寄信通知管理者）
+//       再加上 MAIL_FROM（Resend 已驗證的網域寄件人）才會開放會員自己用 email 重設密碼
+// 變數：SKOOL_URL（放本月驗證碼的 Skool 課程網址，在 wrangler.toml 的 [vars]）
 // ============================================================
 
 const SESSION_DAYS = 30;
 const MAX_DEVICES = 2;
 const PBKDF2_ITER = 100000;
 const enc = new TextEncoder();
+const RESET_HOURS_SELF = 1;   // 會員自己用 email 重設：連結 1 小時內有效
+const RESET_HOURS_ADMIN = 24; // 管理者產生給會員的連結：24 小時內有效
+const DEFAULT_SKOOL_URL = "https://www.skool.com/fosi-trading-1190/classroom/f2d532b7?md=38579a96eb5a4c3faeaeb2d3c9c4b917";
+const skoolUrl = (env) => env.SKOOL_URL || DEFAULT_SKOOL_URL;
+// 沒有驗證過的寄件網域時，Resend 只能寄給帳號本人，所以要有 MAIL_FROM 才開放會員自助重設
+const selfResetOn = (env) => !!(env.RESEND_API_KEY && env.MAIL_FROM);
 
 // ---------- 小工具 ----------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -132,6 +141,7 @@ table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;borde
 th{font-size:12px;color:var(--ink-3);font-weight:500}
 .code{font:600 28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.15em}
 .tag{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line)}
+h2{font-size:17px;margin:26px 0 6px}ul,ol{padding-left:1.3em;color:var(--ink-2);margin:6px 0}li{margin:3px 0}b{color:var(--ink);font-weight:600}
 .row{display:flex;gap:6px;flex-wrap:wrap}form.inline{display:inline}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
 .card{border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -145,6 +155,8 @@ function page(title, body, { wide = false, status = 200 } = {}) {
 const msg = (text, kind = "bad") => (text ? `<div class="msg ${kind}">${esc(text)}</div>` : "");
 const DISCLAIMER = `<p class="small">本站內容依證交所、櫃買中心公開資料統計，僅供研究參考，非投資建議。</p>`;
 
+const skoolLink = (env, text) => `<a href="${esc(skoolUrl(env))}" target="_blank" rel="noopener">${text}</a>`;
+
 function loginPage(err = "", note = "", email = "") {
   return page("登入", `<h1>籌碼力度選股</h1><p>Skool 付費會員專屬。</p>${msg(err)}${msg(note, "ok")}
   <form method="post" action="/login">
@@ -152,27 +164,27 @@ function loginPage(err = "", note = "", email = "") {
     <label for="password">密碼</label><input id="password" name="password" type="password" autocomplete="current-password" required>
     <button class="full" type="submit">登入</button>
   </form>
-  <p class="small" style="margin-top:16px">還沒有帳號？<a href="/register">用本月驗證碼註冊</a></p>${DISCLAIMER}`);
+  <p class="small" style="margin-top:16px"><a href="/forgot">忘記密碼？</a>・還沒有帳號？<a href="/register">用本月驗證碼註冊</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
 }
 
-function registerPage(err = "", email = "") {
-  return page("註冊", `<h1>註冊會員帳號</h1><p>本月驗證碼在 Skool 付費課程裡。註冊後需等管理者核准。</p>${msg(err)}
+function registerPage(env, err = "", email = "") {
+  return page("註冊", `<h1>註冊會員帳號</h1><p>本月驗證碼在 Skool 付費課程裡：${skoolLink(env, "打開 Skool 課程看驗證碼")}。註冊後需等管理者核准。</p>${msg(err)}
   <form method="post" action="/register">
     <label for="email">Email（請用你 Skool 帳號的 email）</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(email)}">
     <label for="password">密碼（至少 8 碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
     <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required>
     <button class="full" type="submit">送出註冊</button>
   </form>
-  <p class="small" style="margin-top:16px">已經有帳號？<a href="/login">登入</a></p>${DISCLAIMER}`);
+  <p class="small" style="margin-top:16px">已經有帳號？<a href="/login">登入</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
 }
 
-function verifyPage(email, err = "") {
-  return page("每月驗證", `<h1>${monthLabel(taipeiMonth())}驗證</h1><p>每個月第一次進站，請輸入 Skool 付費課程裡的本月驗證碼。</p>${msg(err)}
+function verifyPage(env, email, err = "") {
+  return page("每月驗證", `<h1>${monthLabel(taipeiMonth())}驗證</h1><p>每個月第一次進站，請輸入 Skool 付費課程裡的本月驗證碼：${skoolLink(env, "打開 Skool 課程看驗證碼")}。</p>${msg(err)}
   <form method="post" action="/verify">
     <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required autofocus>
     <button class="full" type="submit">確認</button>
   </form>
-  <p class="small" style="margin-top:16px">${esc(email)}・<a href="/logout">登出</a></p>`);
+  <p class="small" style="margin-top:16px">${esc(email)}・<a href="/guide">使用說明</a>・<a href="/logout">登出</a></p>`);
 }
 
 const statusPage = (title, text, email) =>
@@ -182,38 +194,108 @@ const statusPage = (title, text, email) =>
 async function handleRegister(req, env, ip, origin) {
   const f = await req.formData();
   const email = normEmail(f.get("email")), password = String(f.get("password") || ""), code = normCode(f.get("code"));
-  if (await tooMany(env, `reg:${ip}`)) return registerPage("嘗試次數太多，請 15 分鐘後再試。", email);
-  if (!validEmail(email)) return registerPage("Email 格式不正確。", email);
-  if (password.length < 8) return registerPage("密碼至少 8 碼。", email);
+  if (await tooMany(env, `reg:${ip}`)) return registerPage(env, "嘗試次數太多，請 15 分鐘後再試。", email);
+  if (!validEmail(email)) return registerPage(env, "Email 格式不正確。", email);
+  if (password.length < 8) return registerPage(env, "密碼至少 8 碼。", email);
   if (!safeEqual(code, await monthCode(env, taipeiMonth()))) {
     await addFail(env, `reg:${ip}`);
-    return registerPage("驗證碼不正確，請確認是本月的驗證碼。", email);
+    return registerPage(env, "驗證碼不正確，請確認是本月的驗證碼。", email);
   }
-  if (await getUser(env, email)) return registerPage("這個 email 已經註冊過，請直接登入。", email);
+  if (await getUser(env, email)) return registerPage(env, "這個 email 已經註冊過，請直接登入。", email);
   const { salt, hash } = await hashPassword(password);
   await putUser(env, { email, salt, hash, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
   await notifyAdmin(env, email, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和密碼登入即可。</p><p><a href="/login">回登入頁</a></p>`);
 }
 
-async function notifyAdmin(env, email, origin) {
-  if (!env.RESEND_API_KEY || !env.ADMIN_EMAIL) return;
-  const when = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+async function sendMail(env, to, subject, text) {
+  if (!env.RESEND_API_KEY) return false;
   try {
     const r = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        from: env.MAIL_FROM || "籌碼力度選股 <onboarding@resend.dev>",
-        to: [env.ADMIN_EMAIL],
-        subject: `新會員待核准：${email}`,
-        text: `${email} 在 ${when}（台北時間）註冊了籌碼力度選股。\n\n請先到 Skool 確認這個 email 是付費會員，再到管理頁核准：\n${origin}/admin\n`,
-      }),
+      body: JSON.stringify({ from: env.MAIL_FROM || "籌碼力度選股 <onboarding@resend.dev>", to: [to], subject, text }),
     });
-    if (!r.ok) console.log("通知信寄送失敗", r.status, await r.text());
+    if (!r.ok) console.log("寄信失敗", r.status, await r.text());
+    return r.ok;
   } catch (e) {
-    console.log("通知信寄送失敗", String(e)); // 通知失敗不影響註冊
+    console.log("寄信失敗", String(e));
+    return false;
   }
+}
+
+async function notifyAdmin(env, email, origin) {
+  if (!env.ADMIN_EMAIL) return;
+  const when = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+  // 通知失敗不影響註冊
+  await sendMail(env, env.ADMIN_EMAIL, `新會員待核准：${email}`,
+    `${email} 在 ${when}（台北時間）註冊了籌碼力度選股。\n\n請先到 Skool 確認這個 email 是付費會員，再到管理頁核准：\n${origin}/admin\n`);
+}
+
+// ---------- 忘記密碼 / 重設密碼 ----------
+async function createResetToken(env, email, hours) {
+  const t = randomId(24);
+  await env.SITE_KV.put(`rst:${t}`, email, { expirationTtl: hours * 3600 });
+  return t;
+}
+
+function forgotPage(env, note = "", err = "") {
+  const body = selfResetOn(env)
+    ? `<p>輸入註冊時用的 email，我們會寄一封重設密碼的信給你，連結 ${RESET_HOURS_SELF} 小時內有效。</p>
+      <form method="post" action="/forgot"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required>
+      <button class="full" type="submit">寄送重設連結</button></form>
+      <p class="small" style="margin-top:16px">沒收到信？先看垃圾郵件匣；還是沒有，請在 Skool 私訊管理者。</p>`
+    : `<p>請在 Skool 私訊管理者，告訴他你註冊用的 email。管理者會給你一個重設密碼的連結，${RESET_HOURS_ADMIN} 小時內有效。</p>
+      <p>${skoolLink(env, "打開 Skool")}</p>`;
+  return page("忘記密碼", `<h1>忘記密碼</h1>${msg(err)}${msg(note, "ok")}${body}<p class="small" style="margin-top:16px"><a href="/login">回登入頁</a></p>`);
+}
+
+async function handleForgot(req, env, ip, origin) {
+  if (!selfResetOn(env)) return forgotPage(env);
+  if (await tooMany(env, `forgot:${ip}`, 5)) return forgotPage(env, "", "嘗試次數太多，請 15 分鐘後再試。");
+  await addFail(env, `forgot:${ip}`); // 每次送出都計數，避免被拿來亂寄信
+  const email = normEmail((await req.formData()).get("email"));
+  // 不論 email 有沒有註冊都回同一句話，避免被用來查誰是會員
+  const done = forgotPage(env, `如果這個 email 有註冊，重設密碼的信已經寄出，請在 ${RESET_HOURS_SELF} 小時內點信裡的連結。`);
+  const u = validEmail(email) ? await getUser(env, email) : null;
+  if (!u || u.status === "disabled") return done;
+  const t = await createResetToken(env, email, RESET_HOURS_SELF);
+  await sendMail(env, email, "重設你的籌碼力度選股密碼",
+    `有人（希望是你）要求重設籌碼力度選股的密碼。\n\n請在 ${RESET_HOURS_SELF} 小時內點這個連結設定新密碼：\n${origin}/reset?t=${t}\n\n如果不是你本人操作，可以忽略這封信，密碼不會改變。\n`);
+  return done;
+}
+
+const resetExpired = () => page("連結已失效", `<h1>連結已失效</h1><p>這個重設密碼的連結已經用過或過期了。</p><p><a href="/forgot">重新申請</a>・<a href="/login">回登入頁</a></p>`);
+
+function resetPage(token, err = "") {
+  return page("設定新密碼", `<h1>設定新密碼</h1>${msg(err)}
+  <form method="post" action="/reset"><input type="hidden" name="t" value="${esc(token)}">
+    <label for="password">新密碼（至少 8 碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="password2">再輸入一次</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
+    <button class="full" type="submit">更新密碼</button>
+  </form>`);
+}
+
+async function handleReset(req, env, url) {
+  if (req.method !== "POST") {
+    const t = url.searchParams.get("t") || "";
+    return t && (await env.SITE_KV.get(`rst:${t}`)) ? resetPage(t) : resetExpired();
+  }
+  const f = await req.formData();
+  const t = String(f.get("t") || ""), pw = String(f.get("password") || ""), pw2 = String(f.get("password2") || "");
+  const email = t && (await env.SITE_KV.get(`rst:${t}`));
+  if (!email) return resetExpired();
+  if (pw.length < 8) return resetPage(t, "密碼至少 8 碼。");
+  if (pw !== pw2) return resetPage(t, "兩次輸入的密碼不一樣。");
+  const u = await getUser(env, email);
+  if (!u) return resetExpired();
+  const { salt, hash } = await hashPassword(pw);
+  u.salt = salt; u.hash = hash;
+  for (const sid of u.sessions || []) await env.SITE_KV.delete(`sess:${sid}`); // 改密碼後所有裝置都要重新登入
+  u.sessions = [];
+  await putUser(env, u);
+  await env.SITE_KV.delete(`rst:${t}`);
+  return redirect("/login?m=reset");
 }
 
 async function handleLogin(req, env, ip) {
@@ -248,10 +330,10 @@ async function handleLogout(req, env) {
 
 async function handleVerify(req, env, ip, cu) {
   const code = normCode((await req.formData()).get("code"));
-  if (await tooMany(env, `verify:${cu.user.email}`)) return verifyPage(cu.user.email, "嘗試次數太多，請 15 分鐘後再試。");
+  if (await tooMany(env, `verify:${cu.user.email}`)) return verifyPage(env, cu.user.email, "嘗試次數太多，請 15 分鐘後再試。");
   if (!safeEqual(code, await monthCode(env, taipeiMonth()))) {
     await addFail(env, `verify:${cu.user.email}`);
-    return verifyPage(cu.user.email, "驗證碼不正確，請確認是本月的驗證碼。");
+    return verifyPage(env, cu.user.email, "驗證碼不正確，請確認是本月的驗證碼。");
   }
   cu.user.verified_month = taipeiMonth();
   await putUser(env, cu.user);
@@ -261,7 +343,7 @@ async function handleVerify(req, env, ip, cu) {
 async function serveDashboard(env, cu) {
   const html = await env.SITE_KV.get("dashboard");
   if (!html) return statusPage("頁面準備中", "今天的資料還沒上傳，請稍後再來。", cu.user.email);
-  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:#7a8085">${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
+  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:#7a8085"><a href="/guide" style="color:inherit">使用說明</a>${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
   // dashboard.html 是不含 <html>/<body> 的頁面片段（原本給 Artifact 用），這裡補上完整骨架
   const doc = /<!doctype/i.test(html)
     ? html.replace(/<body([^>]*)>/i, (m) => m + bar)
@@ -271,6 +353,64 @@ async function serveDashboard(env, cu) {
   });
 }
 
+// ---------- 使用說明（公開頁面，未登入也看得到） ----------
+function guidePage(env) {
+  const terms = [
+    ["佔股本比", "法人當天買賣超的股數 ÷ 公司發行股數。用比例看，同樣買一萬張，小型股會被凸顯，大型股不會。"],
+    ["力度 z", "今天的佔股本比，比這檔股票「過去 60 個交易日的平常水準」高出幾個標準差。z = 2 代表明顯偏高，數字越大越異常。z 高不代表之後一定會漲。"],
+    ["顯著買超", "力度 z ≥ 2，而且當天是買超。"],
+    ["買方轉強", "佔股本比的 20 日平均剛向上穿過 60 日平均（短期買盤轉強），但力度還沒到顯著門檻。"],
+    ["投信（投本比）", "只看投信的買賣超，用「穩健模式」：除了 z ≥ 2，佔股本比還要至少 0.05%，排除買很少卻因為平常沒人買而衝高 z 的情況。"],
+    ["三大法人", "外資＋投信＋自營商合計，用「靈敏模式」，只看 z。"],
+    ["成交張數門檻", "當天成交量不到 1,000 張的冷門股不列入，避免只靠幾十張就排到前面。"],
+  ].map(([k, v]) => `<tr><td style="white-space:nowrap"><b>${k}</b></td><td>${v}</td></tr>`).join("");
+  return page("使用說明", `<h1>使用說明</h1><p>籌碼力度選股：每個交易日收盤後，從全市場上市櫃普通股中，找出法人買超力道比自己過去 60 天明顯異常的股票。</p>
+
+  <h2>第一次使用</h2>
+  <ol>
+    <li>到 Skool 付費課程拿本月驗證碼（${skoolLink(env, "打開 Skool 課程")}）。</li>
+    <li>到<a href="/register">註冊頁</a>填 email（請用 Skool 帳號的 email）、密碼、驗證碼。</li>
+    <li>等管理者確認你是付費會員後開通，通常幾小時內。</li>
+    <li>到<a href="/login">登入頁</a>登入，就能看每天的清單。</li>
+  </ol>
+
+  <h2>頁面怎麼看</h2>
+  <ul>
+    <li><b>交易日</b>：預設顯示最近 10 個交易日，按「更早」可以看更早以前的。</li>
+    <li><b>看哪個法人</b>：切換「投信（投本比）」或「三大法人」。</li>
+    <li><b>摘要卡</b>：力度最強的一檔、顯著買超檔數、買方轉強檔數，以及被成交量門檻濾掉幾檔。</li>
+    <li><b>力度排行</b>：顯著買超前 15 名，長條越長代表力度 z 越大。</li>
+    <li><b>佔股本比與力度</b>：橫軸是佔股本比、縱軸是力度 z，虛線是 z = 2 的門檻。藍點是顯著買超、橘點是買方轉強；圓形是上市、菱形是上櫃。滑過或點一下點可以看詳細數字。</li>
+    <li><b>完整清單</b>：點欄位名稱可以排序，右上角可以搜尋代號或名稱。「轉強」欄打勾代表同時符合買方轉強。</li>
+  </ul>
+
+  <h2>名詞解釋</h2>
+  <div style="overflow-x:auto"><table><tbody>${terms}</tbody></table></div>
+
+  <h2>更新時間</h2>
+  <p>每個交易日晚上自動更新，偶爾會延到隔天早上。頁面最下方的「資料更新於」是最後更新時間。休市日不會更新。</p>
+
+  <h2>帳號</h2>
+  <ul>
+    <li><b>每月驗證</b>：每個月第一次進站要輸入新的驗證碼，碼在 Skool 付費課程裡，每月 1 號更新。</li>
+    <li><b>裝置數</b>：一個帳號最多同時 2 台裝置登入，第 3 台登入時最舊的那台會被登出。</li>
+    <li><b>忘記密碼</b>：到<a href="/forgot">忘記密碼</a>頁照指示重設。</li>
+    <li><b>加到手機主畫面</b>：iPhone 用 Safari 打開網站 → 分享 → 加入主畫面；Android 用 Chrome 打開 → 右上角 ⋮ → 加到主畫面。</li>
+    <li>帳號請勿共用或轉借；退出付費方案後，下個月起就無法登入。</li>
+  </ul>
+
+  <h2>常見問題</h2>
+  <ul>
+    <li><b>驗證碼輸入錯誤？</b>確認是「本月」的碼，英文大小寫都可以。</li>
+    <li><b>註冊後一直顯示等待核准？</b>管理者會盡快處理，太久的話在 Skool 私訊管理者。</li>
+    <li><b>今天的資料還沒出來？</b>證交所約 16:30 公布資料，網站通常晚上更新，偶爾會延到隔天早上。</li>
+  </ul>
+
+  <h2>聲明</h2>
+  <p>本站內容依證交所、櫃買中心公開的法人買賣超資料統計，<b>僅供研究與學習參考，不構成任何投資建議或買賣推薦</b>。統計結果不代表未來表現，請依自己的判斷與風險承受度做決定。</p>
+  <p class="small" style="margin-top:20px"><a href="/">回到選股頁面</a>・<a href="/login">登入</a></p>`, { wide: true });
+}
+
 // ---------- 管理端 ----------
 function adminLoginPage(err = "") {
   return page("管理登入", `<h1>管理頁</h1>${msg(err)}<form method="post" action="/admin/login">
@@ -278,7 +418,7 @@ function adminLoginPage(err = "") {
   <button class="full" type="submit">登入</button></form>`);
 }
 
-async function adminHome(env, note = "") {
+async function adminHome(env, note = "", extra = "") {
   const list = [];
   let cursor;
   do {
@@ -296,11 +436,11 @@ async function adminHome(env, note = "") {
   const cur = taipeiMonth(), next = taipeiMonth(1);
   const rows = list.map((u) => `<tr><td>${esc(u.email)}</td><td><span class="tag">${label[u.status]}</span></td><td>${esc(u.created.slice(0, 10))}</td><td>${u.verified_month === cur ? "本月已驗證" : "本月未驗證"}</td><td>${(u.sessions || []).length}</td><td class="row">${
     u.status === "pending" ? btn(u.email, "approve", "核准") + btn(u.email, "delete", "刪除")
-      : u.status === "active" ? btn(u.email, "disable", "停用") + btn(u.email, "logout", "全部登出")
+      : u.status === "active" ? btn(u.email, "resetlink", "重設密碼連結") + btn(u.email, "disable", "停用") + btn(u.email, "logout", "全部登出")
       : btn(u.email, "approve", "重新開通") + btn(u.email, "delete", "刪除")
   }</td></tr>`).join("") || `<tr><td colspan="6" class="small">還沒有人註冊。</td></tr>`;
   const counts = (s) => list.filter((u) => u.status === s).length;
-  return page("管理頁", `<div style="display:flex;justify-content:space-between;align-items:center"><h1>管理頁</h1><a href="/admin/logout" class="small">登出管理頁</a></div>${msg(note, "ok")}
+  return page("管理頁", `<div style="display:flex;justify-content:space-between;align-items:center"><h1>管理頁</h1><a href="/admin/logout" class="small">登出管理頁</a></div>${msg(note, "ok")}${extra}
   <div class="cards">
     <div class="card"><div class="small">${monthLabel(cur)}驗證碼（貼到 Skool 課程）</div><div class="code">${await monthCode(env, cur)}</div></div>
     <div class="card"><div class="small">${monthLabel(next)}驗證碼（下個月 1 號換上）</div><div class="code">${await monthCode(env, next)}</div></div>
@@ -310,7 +450,7 @@ async function adminHome(env, note = "") {
   <div style="overflow-x:auto"><table><thead><tr><th>Email</th><th>狀態</th><th>註冊日</th><th>每月驗證</th><th>登入裝置</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, { wide: true });
 }
 
-async function adminAction(req, env) {
+async function adminAction(req, env, origin) {
   const f = await req.formData();
   const email = normEmail(f.get("email")), action = String(f.get("action") || "");
   const u = await getUser(env, email);
@@ -319,6 +459,10 @@ async function adminAction(req, env) {
   if (action === "approve") { u.status = "active"; await putUser(env, u); return adminHome(env, `已開通 ${email}`); }
   if (action === "disable") { u.status = "disabled"; await dropSessions(); await putUser(env, u); return adminHome(env, `已停用 ${email}`); }
   if (action === "logout") { await dropSessions(); await putUser(env, u); return adminHome(env, `已將 ${email} 全部登出`); }
+  if (action === "resetlink") {
+    const link = `${origin}/reset?t=${await createResetToken(env, email, RESET_HOURS_ADMIN)}`;
+    return adminHome(env, `已產生 ${email} 的重設密碼連結`, `<div class="card" style="margin:12px 0"><div class="small">把這個連結私訊給會員，${RESET_HOURS_ADMIN} 小時內有效、只能用一次：</div><input readonly value="${esc(link)}" onclick="this.select()" style="margin-top:6px;font-family:ui-monospace,monospace;font-size:13px"></div>`);
+  }
   if (action === "delete") { await dropSessions(); await env.SITE_KV.delete(`user:${email}`); return adminHome(env, `已刪除 ${email}`); }
   return adminHome(env, "不明的操作。");
 }
@@ -352,16 +496,20 @@ export default {
         return redirect("/admin", { "Set-Cookie": setCookie("adm", "", 0) });
       }
       if (!(await isAdmin(env, req))) return adminLoginPage();
-      if (path === "/admin/action" && req.method === "POST") return adminAction(req, env);
+      if (path === "/admin/action" && req.method === "POST") return adminAction(req, env, url.origin);
       return adminHome(env);
     }
 
-    if (path === "/register") return req.method === "POST" ? handleRegister(req, env, ip, url.origin) : registerPage();
+    if (path === "/register") return req.method === "POST" ? handleRegister(req, env, ip, url.origin) : registerPage(env);
     if (path === "/login") {
       if (req.method === "POST") return handleLogin(req, env, ip);
-      return loginPage("", url.searchParams.get("m") === "out" ? "已登出。" : "");
+      const m = url.searchParams.get("m");
+      return loginPage("", m === "out" ? "已登出。" : m === "reset" ? "密碼已更新，請用新密碼登入。" : "");
     }
     if (path === "/logout") return handleLogout(req, env);
+    if (path === "/forgot") return req.method === "POST" ? handleForgot(req, env, ip, url.origin) : forgotPage(env);
+    if (path === "/reset") return handleReset(req, env, url);
+    if (path === "/guide") return guidePage(env);
 
     const cu = await currentUser(env, req);
     if (!cu) return redirect("/login");
@@ -369,7 +517,7 @@ export default {
     if (cu.user.status !== "active") return statusPage("帳號已停用", "如有疑問請在 Skool 聯絡管理者。", cu.user.email);
     if (cu.user.verified_month !== taipeiMonth()) {
       if (path === "/verify" && req.method === "POST") return handleVerify(req, env, ip, cu);
-      return verifyPage(cu.user.email);
+      return verifyPage(env, cu.user.email);
     }
     if (path === "/" || path === "/verify") return serveDashboard(env, cu);
     return new Response("Not found", { status: 404 });

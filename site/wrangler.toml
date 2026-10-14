@@ -6,3 +6,7 @@ compatibility_date = "2026-09-01"
 [[kv_namespaces]]
 binding = "SITE_KV"
 id = "__SITE_KV_ID__"
+
+[vars]
+# 放本月驗證碼的 Skool 課程網址（註冊頁、驗證頁、使用說明會連到這裡）
+SKOOL_URL = "https://www.skool.com/fosi-trading-1190/classroom/f2d532b7?md=38579a96eb5a4c3faeaeb2d3c9c4b917"
