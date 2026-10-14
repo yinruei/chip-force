@@ -6,6 +6,8 @@ on:
     paths:
       - "site/**"
       - ".github/workflows/site.yml"
+      - "dashboard_template.html"
+      - "build_dashboard.py"
   workflow_dispatch:
 
 concurrency:
@@ -65,5 +67,12 @@ jobs:
           npx -y wrangler@4 secret bulk secrets.json
           rm secrets.json
 
-      - name: 上傳目前的頁面
-        run: bash site/upload.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 用 repo 裡已有的資料重建頁面（不連網），讓頁面版型的修改不必等到晚上的排程就生效
+      - name: 重建並上傳目前的頁面
+        run: |
+          python build_dashboard.py
+          bash site/upload.sh

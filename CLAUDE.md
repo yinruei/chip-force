@@ -38,3 +38,6 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 - 僅納入 4 碼普通股（`is_common_stock`）。
 - 快取、輸出都由 GitHub Actions 自動 commit；本機跑完若要保留結果再自行 commit，避免與 bot 的 commit 衝突，開工前先 `git pull`。
 - 結果僅為公開資料之統計，非投資建議。
+
+## 選股方法保密
+會員看得到的地方（`dashboard_template.html`、頁面裡的 `DATA`、`site/worker.js` 的使用說明 `/guide`、Skool 截圖）都不要寫出公式或參數（60 日、z、標準差、門檻 2、0.05%、1000 張、20/60 日均線）。頁面資料只放門檻值 `params.k` 畫虛線，力度欄位叫 `f`、畫面上叫「力度」。

@@ -24,7 +24,7 @@ MODES = {"三大法人": "靈敏", "投信": "穩健"}
 
 def row(r: dict) -> dict:
     return {"c": r["代號"], "n": r["名稱"], "m": r["市場"], "v": r["成交張數"], "net": r["法人買賣超(張)"],
-            "r": r["佔股本比(%)"], "z": r["力度z"], "x": bool(r["買方轉強"])}
+            "r": r["佔股本比(%)"], "f": r["力度z"], "x": bool(r["買方轉強"])}
 
 
 def load_volume_cached(d: dt.date):
@@ -44,7 +44,8 @@ def main() -> None:
     need = max(p["window"], p["slow"]) + p["confirm"] + 1
     # 有成交量資料的日子 = 有 vol_ 快取（選股當天抓的）或 px_ 快取（回測抓的價量）
     have = {f.stem.split("_", 1)[1] for pat in ("vol_*.csv", "px_*.csv") for f in c.CACHE.glob(pat)}
-    out = {"params": p, "dates": {}}
+    # 頁面只需要門檻值來畫虛線；其他參數不放進頁面，避免從原始碼看出選股條件
+    out = {"params": {"k": p["k"]}, "dates": {}}
     for ds in sorted(have)[-KEEP_DAYS:]:
         d = dt.date(int(ds[:4]), int(ds[4:6]), int(ds[6:]))
         # deadline 設成過去 = 只讀快取、不連網；缺資料的日子就略過
