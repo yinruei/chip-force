@@ -1,0 +1,65 @@
+name: 檢查會員網站
+
+# 手動執行：量測登入等頁面的回應時間，並抓 Worker 的執行紀錄（錯誤、CPU 超時），用來查「登入後卡住」這類問題。
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: 過去 24 小時的執行統計
+        continue-on-error: true
+        run: |
+          ACC=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
+          TOK=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
+          SINCE=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%SZ); UNTIL=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          python3 - "$ACC" "$SINCE" "$UNTIL" > q.json <<'PY'
+          import json, sys
+          acc, since, until = sys.argv[1:]
+          q = """query($acc: String!, $since: Time!, $until: Time!) { viewer { accounts(filter: {accountTag: $acc}) {
+            workersInvocationsAdaptive(limit: 100, filter: {scriptName: "chip-force-site", datetime_geq: $since, datetime_leq: $until}) {
+              sum { requests errors subrequests } dimensions { status }
+              quantiles { cpuTimeP50 cpuTimeP99 wallTimeP50 wallTimeP99 } } } } }"""
+          print(json.dumps({"query": q, "variables": {"acc": acc, "since": since, "until": until}}))
+          PY
+          curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" --data @q.json | python3 -m json.tool
+
+      - name: 量測回應時間並抓執行紀錄
+        run: |
+          export CLOUDFLARE_ACCOUNT_ID=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
+          export CLOUDFLARE_API_TOKEN=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
+          SITE=https://chip-force-site.littleblacker29.workers.dev
+          (npx -y wrangler@4 tail chip-force-site --format json > tail.log 2> tail.err &)
+          sleep 20
+          t() { curl -sS -o /dev/null --max-time 60 -w "%{http_code}  %{time_total}s  $1\n" "${@:2}"; }
+          for i in 1 2 3; do
+            t "GET /login" "$SITE/login"
+            t "POST /login（不存在的帳號，會跑一次密碼雜湊）" -X POST -H "Origin: $SITE" --data "email=site-check@example.invalid&password=wrong-password" "$SITE/login"
+            t "GET /（未登入，應該 303）" "$SITE/"
+            t "GET /guide" "$SITE/guide"
+          done
+          sleep 8
+          pkill -f "wrangler.*tail" || true
+          echo "---- Worker 執行紀錄（每個請求的結果）----"
+          python3 - <<'PY'
+          import json
+          raw = open("tail.log", encoding="utf-8").read()
+          dec, i, n = json.JSONDecoder(), 0, 0
+          while i < len(raw):
+              while i < len(raw) and raw[i].isspace(): i += 1
+              if i >= len(raw): break
+              ev, i = dec.raw_decode(raw, i); n += 1
+              req = (ev.get("event") or {}).get("request") or {}
+              print(ev.get("outcome"), req.get("method"), req.get("url"), ev.get("exceptions") or "", ev.get("logs") or "")
+          print(f"共 {n} 筆")
+          PY
+          echo "---- tail stderr ----"; tail -n 20 tail.err || true
