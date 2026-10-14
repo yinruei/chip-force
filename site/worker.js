@@ -41,6 +41,10 @@ const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart
 const randomId = (n = 24) => hex(crypto.getRandomValues(new Uint8Array(n)));
 const normEmail = (s) => String(s || "").trim().toLowerCase();
 const validEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) && s.length <= 200;
+// Skool 個人帳號（個人檔案網址 skool.com/@ 後面那段）。接受「@abc-123」「abc-123」或整個網址
+const normHandle = (s) => String(s || "").trim().toLowerCase().replace(/^https?:\/\/(www\.)?skool\.com\//, "").replace(/^@/, "").replace(/[/?#].*$/, "");
+const validHandle = (h) => /^[a-z0-9][a-z0-9-]{1,63}$/.test(h);
+const skoolProfile = (h) => `https://www.skool.com/@${h}`;
 
 // 台北時間的年月，例如 "202610"
 function taipeiMonth(offsetMonths = 0) {
@@ -108,7 +112,7 @@ async function addFail(env, key) {
 //   st:<email>    狀態 pending / active / disabled（只有註冊和管理者會寫）
 //   vm:<email>    已完成每月驗證的年月（會員輸入驗證碼）
 //   ss:<email>    登入中的裝置 session 清單（登入、登出、管理者）
-const ACCOUNT_FIELDS = ["email", "salt", "hash", "iter", "created"];
+const ACCOUNT_FIELDS = ["email", "salt", "hash", "iter", "created", "skool"];
 async function getUser(env, email) {
   const [raw, st, vm, ss] = await Promise.all(["user", "st", "vm", "ss"].map((p) => env.SITE_KV.get(`${p}:${email}`)));
   if (!raw) return null;
@@ -129,8 +133,14 @@ const putAccount = (env, u) => env.SITE_KV.put(`user:${u.email}`, JSON.stringify
 const setStatus = (env, email, status) => env.SITE_KV.put(`st:${email}`, status);
 const setVerified = (env, email, ym) => env.SITE_KV.put(`vm:${email}`, ym);
 const setSessions = (env, email, list) => env.SITE_KV.put(`ss:${email}`, JSON.stringify(list));
-async function deleteUser(env, email) {
-  for (const p of ["user", "st", "vm", "ss"]) await env.SITE_KV.delete(`${p}:${email}`);
+async function deleteUser(env, u) {
+  await unbindHandle(env, u);
+  for (const p of ["user", "st", "vm", "ss"]) await env.SITE_KV.delete(`${p}:${u.email}`);
+}
+// sk:<Skool 帳號> → email。一個 Skool 帳號只能綁一個 email，避免冒用別人的付費帳號
+async function handleOwner(env, h) { return env.SITE_KV.get(`sk:${h}`); }
+async function unbindHandle(env, u) {
+  if (u.skool && (await handleOwner(env, u.skool)) === u.email) await env.SITE_KV.delete(`sk:${u.skool}`);
 }
 
 async function currentUser(env, req) {
@@ -158,7 +168,7 @@ const STYLE = `
 .wide{max-width:960px}
 h1{font-size:22px;margin:0 0 4px}p{margin:8px 0;color:var(--ink-2)}
 label{display:block;font-size:13px;color:var(--ink-3);margin:14px 0 4px}
-input{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+input,textarea{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
 button{font:inherit;cursor:pointer;border:0;border-radius:8px;padding:10px 14px;background:var(--ink);color:var(--bg);font-weight:500}
 button.ghost{background:transparent;color:var(--ink-2);border:1px solid var(--line);padding:6px 10px;font-size:13px}
 .full{width:100%;margin-top:18px}
@@ -168,7 +178,7 @@ a{color:var(--accent)}.small{font-size:13px;color:var(--ink-3)}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
 th{font-size:12px;color:var(--ink-3);font-weight:500}
 .code{font:600 28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:.15em}
-.tag{font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line)}
+.tag{white-space:nowrap;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line)}
 h2{font-size:17px;margin:26px 0 6px}ul,ol{padding-left:1.3em;color:var(--ink-2);margin:6px 0}li{margin:3px 0}b{color:var(--ink);font-weight:600}
 .row{display:flex;gap:6px;flex-wrap:wrap}form.inline{display:inline}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
@@ -195,10 +205,15 @@ function loginPage(err = "", note = "", email = "") {
   <p class="small" style="margin-top:16px"><a href="/forgot">忘記密碼？</a>・還沒有帳號？<a href="/register">用本月驗證碼註冊</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
 }
 
-function registerPage(env, err = "", email = "") {
+const HANDLE_HELP = `打開 Skool → 點右上角自己的頭像 → 個人檔案，網址 <b>skool.com/@</b> 後面那段就是（例如 @su-ray-2735），會員列表裡名字下方也看得到。管理者會用它確認你是付費會員。`;
+const handleInput = (h = "") => `<input id="skool" name="skool" autocomplete="off" required placeholder="例如 @su-ray-2735" value="${esc(h ? "@" + h : "")}">
+    <p class="small" style="margin:4px 0 0">${HANDLE_HELP}</p>`;
+
+function registerPage(env, err = "", email = "", handle = "") {
   return page("註冊", `<h1>註冊會員帳號</h1><p>本月驗證碼在 Skool 付費課程裡：${skoolLink(env, "打開 Skool 課程看驗證碼")}。註冊後需等管理者核准。</p>${msg(err)}
   <form method="post" action="/register">
     <label for="email">Email（請用你 Skool 帳號的 email）</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(email)}">
+    <label for="skool">Skool 帳號</label>${handleInput(handle)}
     <label for="password">設定本站密碼（至少 8 碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
     <p class="small" style="margin:4px 0 0">這是籌碼力度網站自己的密碼，<b>不是 Skool 密碼</b>。請設一組和 Skool 不同的密碼；之後在 Skool 改密碼，這裡的密碼不會跟著變。</p>
     <label for="password2">再輸入一次本站密碼</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
@@ -217,6 +232,33 @@ function verifyPage(env, email, err = "") {
   <p class="small" style="margin-top:16px">${esc(email)}・<a href="/guide">使用說明</a>・<a href="/logout">登出</a></p>`);
 }
 
+function skoolPage(email, err = "", handle = "") {
+  return page("填寫 Skool 帳號", `<h1>填寫你的 Skool 帳號</h1><p>為了確認付費會員身分，請填一次你的 Skool 帳號，之後不用再填。</p>${msg(err)}
+  <form method="post" action="/skool">
+    <label for="skool">Skool 帳號</label>${handleInput(handle)}
+    <button class="full" type="submit">確認</button>
+  </form>
+  <p class="small" style="margin-top:16px">${esc(email)}・<a href="/logout">登出</a></p>`);
+}
+
+// 檢查並綁定 Skool 帳號；回傳錯誤訊息（沒問題則回傳空字串）
+async function checkHandle(env, h, email) {
+  if (!validHandle(h)) return "Skool 帳號格式不正確，請填個人檔案網址 skool.com/@ 後面那段，例如 @su-ray-2735。";
+  const owner = await handleOwner(env, h);
+  if (owner && owner !== email) return "這個 Skool 帳號已經綁定其他 email。如果是你本人，請在 Skool 私訊管理者。";
+  return "";
+}
+
+async function handleSkool(req, env, cu) {
+  const h = normHandle((await req.formData()).get("skool"));
+  const err = await checkHandle(env, h, cu.user.email);
+  if (err) return skoolPage(cu.user.email, err, h);
+  await env.SITE_KV.put(`sk:${h}`, cu.user.email);
+  cu.user.skool = h;
+  await putAccount(env, cu.user);
+  return redirect("/");
+}
+
 const statusPage = (title, text, email) =>
   page(title, `<h1>${esc(title)}</h1><p>${esc(text)}</p><p class="small" style="margin-top:16px">${esc(email)}・<a href="/logout">登出</a></p>`);
 
@@ -224,21 +266,26 @@ const statusPage = (title, text, email) =>
 async function handleRegister(req, env, ip, origin) {
   const f = await req.formData();
   const email = normEmail(f.get("email")), password = String(f.get("password") || ""), code = normCode(f.get("code"));
-  if (await tooMany(env, `reg:${ip}`)) return registerPage(env, "嘗試次數太多，請 15 分鐘後再試。", email);
-  if (!validEmail(email)) return registerPage(env, "Email 格式不正確。", email);
-  if (password.length < 8) return registerPage(env, "密碼至少 8 碼。", email);
-  if (password !== String(f.get("password2") || "")) return registerPage(env, "兩次輸入的密碼不一樣。", email);
+  const handle = normHandle(f.get("skool"));
+  const again = (err) => registerPage(env, err, email, handle);
+  if (await tooMany(env, `reg:${ip}`)) return again("嘗試次數太多，請 15 分鐘後再試。");
+  if (!validEmail(email)) return again("Email 格式不正確。");
+  if (password.length < 8) return again("密碼至少 8 碼。");
+  if (password !== String(f.get("password2") || "")) return again("兩次輸入的密碼不一樣。");
   if (!safeEqual(code, await monthCode(env, taipeiMonth()))) {
     await addFail(env, `reg:${ip}`);
-    return registerPage(env, "驗證碼不正確，請確認是本月的驗證碼。", email);
+    return again("驗證碼不正確，請確認是本月的驗證碼。");
   }
-  if (await getUser(env, email)) return registerPage(env, "這個 email 已經註冊過，請直接登入。", email);
+  if (await getUser(env, email)) return again("這個 email 已經註冊過，請直接登入。");
+  const herr = await checkHandle(env, handle, email);
+  if (herr) return again(herr);
   const { salt, hash, iter } = await hashPassword(password);
   await setStatus(env, email, "pending");
   await setVerified(env, email, taipeiMonth());
   await setSessions(env, email, []);
-  await putAccount(env, { email, salt, hash, iter, created: new Date().toISOString() });
-  await notifyAdmin(env, email, origin);
+  await env.SITE_KV.put(`sk:${handle}`, email);
+  await putAccount(env, { email, salt, hash, iter, created: new Date().toISOString(), skool: handle });
+  await notifyAdmin(env, email, handle, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和你在本站設的密碼登入（不是 Skool 密碼）。</p><p><a href="/login">回登入頁</a></p>`);
 }
 
@@ -258,12 +305,12 @@ async function sendMail(env, to, subject, text) {
   }
 }
 
-async function notifyAdmin(env, email, origin) {
+async function notifyAdmin(env, email, handle, origin) {
   if (!env.ADMIN_EMAIL) return;
   const when = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
   // 通知失敗不影響註冊
   await sendMail(env, env.ADMIN_EMAIL, `新會員待核准：${email}`,
-    `${email} 在 ${when}（台北時間）註冊了籌碼力度選股。\n\n請先到 Skool 確認這個 email 是付費會員，再到管理頁核准：\n${origin}/admin\n`);
+    `${email} 在 ${when}（台北時間）註冊了籌碼力度選股。\n\nSkool 帳號：@${handle}\n${skoolProfile(handle)}\n\n請先到 Skool 會員列表確認 @${handle} 是付費方案（不是「免費」），再到管理頁核准：\n${origin}/admin\n`);
 }
 
 // ---------- 忘記密碼 / 重設密碼 ----------
@@ -402,7 +449,7 @@ function guidePage(env) {
   <h2>第一次使用</h2>
   <ol>
     <li>到 Skool 付費課程拿本月驗證碼（${skoolLink(env, "打開 Skool 課程")}）。</li>
-    <li>到<a href="/register">註冊頁</a>填 email（請用 Skool 帳號的 email）、驗證碼，並設定一組<b>本站專用的密碼</b>（不是 Skool 密碼）。</li>
+    <li>到<a href="/register">註冊頁</a>填 email（請用 Skool 帳號的 email）、<b>Skool 帳號</b>（個人檔案網址 skool.com/@ 後面那段）、驗證碼，並設定一組<b>本站專用的密碼</b>（不是 Skool 密碼）。</li>
     <li>等管理者確認你是付費會員後開通，通常幾小時內。</li>
     <li>到<a href="/login">登入頁</a>登入，就能看每天的清單。</li>
   </ol>
@@ -453,27 +500,31 @@ function adminLoginPage(err = "") {
   <button class="full" type="submit">登入</button></form>`);
 }
 
-async function adminHome(env, note = "", extra = "") {
-  const list = [];
+async function allUsers(env) {
+  const names = [];
   let cursor;
   do {
     const r = await env.SITE_KV.list({ prefix: "user:", cursor });
-    for (const k of r.keys) {
-      const u = await getUser(env, k.name.slice(5));
-      if (u) list.push(u);
-    }
+    names.push(...r.keys.map((k) => k.name.slice(5)));
     cursor = r.list_complete ? null : r.cursor;
   } while (cursor);
+  return (await Promise.all(names.map((e) => getUser(env, e)))).filter(Boolean);
+}
+
+const STATUS_LABEL = { pending: "待核准", active: "已開通", disabled: "已停用" };
+const adminBtn = (email, action, text) => `<form class="inline" method="post" action="/admin/action"><input type="hidden" name="email" value="${esc(email)}"><input type="hidden" name="action" value="${action}"><button class="ghost" type="submit">${text}</button></form>`;
+const handleCell = (u) => (u.skool ? `<a href="${esc(skoolProfile(u.skool))}" target="_blank" rel="noopener">@${esc(u.skool)}</a>` : `<span class="small">未填</span>`);
+
+async function adminHome(env, note = "", extra = "") {
+  const list = await allUsers(env);
   const order = { pending: 0, active: 1, disabled: 2 };
   list.sort((a, b) => order[a.status] - order[b.status] || a.created.localeCompare(b.created));
-  const label = { pending: "待核准", active: "已開通", disabled: "已停用" };
-  const btn = (email, action, text) => `<form class="inline" method="post" action="/admin/action"><input type="hidden" name="email" value="${esc(email)}"><input type="hidden" name="action" value="${action}"><button class="ghost" type="submit">${text}</button></form>`;
   const cur = taipeiMonth(), next = taipeiMonth(1);
-  const rows = list.map((u) => `<tr><td>${esc(u.email)}</td><td><span class="tag">${label[u.status]}</span></td><td>${esc(u.created.slice(0, 10))}</td><td>${u.verified_month === cur ? "本月已驗證" : "本月未驗證"}</td><td>${(u.sessions || []).length}</td><td class="row">${
-    u.status === "pending" ? btn(u.email, "approve", "核准") + btn(u.email, "delete", "刪除")
-      : u.status === "active" ? btn(u.email, "resetlink", "重設密碼連結") + btn(u.email, "disable", "停用") + btn(u.email, "logout", "全部登出")
-      : btn(u.email, "approve", "重新開通") + btn(u.email, "delete", "刪除")
-  }</td></tr>`).join("") || `<tr><td colspan="6" class="small">還沒有人註冊。</td></tr>`;
+  const rows = list.map((u) => `<tr><td>${esc(u.email)}</td><td>${handleCell(u)}</td><td><span class="tag">${STATUS_LABEL[u.status]}</span></td><td>${esc(u.created.slice(0, 10))}</td><td>${u.verified_month === cur ? "本月已驗證" : "本月未驗證"}</td><td>${u.sessions.length}</td><td class="row">${
+    u.status === "pending" ? adminBtn(u.email, "approve", "核准") + adminBtn(u.email, "delete", "刪除")
+      : u.status === "active" ? adminBtn(u.email, "resetlink", "重設密碼連結") + adminBtn(u.email, "disable", "停用") + adminBtn(u.email, "logout", "全部登出")
+      : adminBtn(u.email, "approve", "重新開通") + adminBtn(u.email, "delete", "刪除")
+  }${u.skool ? adminBtn(u.email, "clearskool", "清除 Skool 帳號") : ""}</td></tr>`).join("") || `<tr><td colspan="7" class="small">還沒有人註冊。</td></tr>`;
   const counts = (s) => list.filter((u) => u.status === s).length;
   return page("管理頁", `<div style="display:flex;justify-content:space-between;align-items:center"><h1>管理頁</h1><a href="/admin/logout" class="small">登出管理頁</a></div>${msg(note, "ok")}${extra}
   <div class="cards">
@@ -481,13 +532,77 @@ async function adminHome(env, note = "", extra = "") {
     <div class="card"><div class="small">${monthLabel(next)}驗證碼（下個月 1 號換上）</div><div class="code">${await monthCode(env, next)}</div></div>
     <div class="card"><div class="small">會員</div><div style="font-size:20px">待核准 ${counts("pending")}・已開通 ${counts("active")}・已停用 ${counts("disabled")}</div></div>
   </div>
-  <p class="small">核准前請到 Skool 確認對方是付費會員（用 email 對照）。核准或停用後，最多約 1 分鐘生效。</p>
-  <div style="overflow-x:auto"><table><thead><tr><th>Email</th><th>狀態</th><th>註冊日</th><th>每月驗證</th><th>登入裝置</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>`, { wide: true });
+  <p class="small">核准前請到 Skool 確認對方是付費會員：點 Skool 帳號連結看他的個人檔案，或用下方「名單比對」。核准或停用後，最多約 1 分鐘生效。</p>
+  <div style="overflow-x:auto"><table><thead><tr><th>Email</th><th>Skool 帳號</th><th>狀態</th><th>註冊日</th><th>每月驗證</th><th>登入裝置</th><th>操作</th></tr></thead><tbody>${rows}</tbody></table></div>
+
+  <h2>名單比對</h2>
+  <p class="small">到 Skool 社團的「會員」頁面，全選（Ctrl+A 或 ⌘A）→ 複製整頁 → 貼到下面。系統會找出每個 @帳號和他的方案（免費／付費），和本站會員對照。會員多、要往下捲或換頁時，可以分幾次貼，或一次把好幾頁的文字一起貼上。</p>
+  <form method="post" action="/admin/action">
+    <input type="hidden" name="action" value="compare">
+    <textarea name="list" rows="6" required placeholder="把 Skool 會員頁面的文字貼在這裡"></textarea>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--ink-2)"><input type="checkbox" name="allpaid" value="1" style="width:auto">貼的是「只有付費會員」的清單（例如在 Skool 篩選付費方案後複製，或自己整理的 @帳號清單）</label>
+    <button type="submit" style="margin-top:10px">比對</button>
+  </form>`, { wide: true });
+}
+
+// 從 Skool 會員頁面複製的文字裡，找出每個 @帳號和緊接在後面的方案（「免費」或有金額的付費方案）
+function parseSkoolList(text, allPaid) {
+  const t = String(text || "");
+  const hits = [...t.matchAll(/(?:^|[^a-z0-9._%+-])@([a-z0-9][a-z0-9-]{1,63})/gim)];
+  const out = new Map();
+  hits.forEach((m, i) => {
+    const h = m[1].toLowerCase();
+    if (allPaid) return out.set(h, { plan: "paid", label: "付費（清單）" });
+    const seg = t.slice(m.index + m[0].length, i + 1 < hits.length ? hits[i + 1].index : undefined);
+    const lines = seg.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const paid = lines.find((l) => /\$\s*\d|\d\s*(美元|usd|twd)|\/\s*(月|mo)|每月|per month|monthly/i.test(l));
+    const free = lines.find((l) => /^(免費|free)$/i.test(l));
+    // 同一個帳號出現多次（例如貼了重複的頁面）時，以看得出方案的那次為準
+    const prev = out.get(h);
+    const now = paid ? { plan: "paid", label: paid } : free ? { plan: "free", label: free } : { plan: "unknown", label: "看不出方案" };
+    if (!prev || prev.plan === "unknown") out.set(h, now);
+  });
+  return out;
+}
+
+async function compareList(env, text, allPaid) {
+  const sk = parseSkoolList(text, allPaid);
+  if (!sk.size) return adminHome(env, "", `<div class="msg bad">貼上的文字裡找不到任何 @帳號。請到 Skool 會員頁面全選複製整頁再貼一次。</div>`);
+  const users = await allUsers(env);
+  const groups = { approve: [], disable: [], ok: [], missing: [], nohandle: [], other: [] };
+  for (const u of users) {
+    const hit = u.skool && sk.get(u.skool);
+    const plan = hit ? hit.plan : null;
+    let g, advice, btns = "";
+    if (!u.skool) { g = "nohandle"; advice = "還沒填 Skool 帳號（下次登入會被要求補填）"; }
+    else if (!hit) { g = "missing"; advice = "不在貼上的名單裡（可能在別頁，或已離開社團）"; }
+    else if (plan === "paid") {
+      if (u.status === "pending") { g = "approve"; advice = "付費會員，可以核准"; btns = adminBtn(u.email, "approve", "核准"); }
+      else if (u.status === "disabled") { g = "other"; advice = "付費會員，但目前停用"; btns = adminBtn(u.email, "approve", "重新開通"); }
+      else { g = "ok"; advice = "付費會員，正常"; }
+    } else if (plan === "free") {
+      if (u.status === "active") { g = "disable"; advice = "Skool 顯示免費，建議停用"; btns = adminBtn(u.email, "disable", "停用"); }
+      else if (u.status === "pending") { g = "disable"; advice = "Skool 顯示免費，不要核准"; btns = adminBtn(u.email, "delete", "刪除"); }
+      else { g = "ok"; advice = "免費，已停用"; }
+    } else { g = "other"; advice = "找到帳號但看不出方案，請到 Skool 確認"; }
+    groups[g].push(`<tr><td>${esc(u.email)}</td><td>${handleCell(u)}</td><td><span class="tag">${STATUS_LABEL[u.status]}</span></td><td>${hit ? esc(hit.label) : "—"}</td><td>${advice}</td><td class="row">${btns}</td></tr>`);
+  }
+  const siteHandles = new Set(users.map((u) => u.skool).filter(Boolean));
+  const paidNoAccount = [...sk].filter(([h, v]) => v.plan === "paid" && !siteHandles.has(h)).length;
+  const section = (title, rows) => (rows.length ? `<h2>${title}（${rows.length}）</h2><div style="overflow-x:auto"><table><thead><tr><th>Email</th><th>Skool 帳號</th><th>狀態</th><th>Skool 方案</th><th>建議</th><th>操作</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>` : "");
+  const c = (p) => [...sk.values()].filter((v) => v.plan === p).length;
+  const html = `<div class="card" style="margin:12px 0"><b>名單比對結果</b>
+    <p class="small">貼上的名單共 ${sk.size} 個 @帳號：付費 ${c("paid")}・免費 ${c("free")}・看不出方案 ${c("unknown")}。另有 ${paidNoAccount} 位付費會員還沒在本站註冊。</p>
+    ${section("可以核准", groups.approve)}${section("建議停用或刪除", groups.disable)}${section("需要確認", groups.other)}${section("不在名單裡", groups.missing)}${section("還沒填 Skool 帳號", groups.nohandle)}${section("正常", groups.ok)}
+    <p class="small">「不在名單裡」不一定代表退訂：Skool 會員頁一次只顯示一部分，請確認有把所有頁面都貼上，再決定要不要停用。</p></div>`;
+  return adminHome(env, "", html);
 }
 
 async function adminAction(req, env, origin) {
   const f = await req.formData();
-  const email = normEmail(f.get("email")), action = String(f.get("action") || "");
+  const action = String(f.get("action") || "");
+  if (action === "compare") return compareList(env, f.get("list"), f.get("allpaid") === "1");
+  const email = normEmail(f.get("email"));
   const u = await getUser(env, email);
   if (!u) return adminHome(env, "找不到這個帳號。");
   const dropSessions = async () => { for (const s of u.sessions) await env.SITE_KV.delete(`sess:${s}`); await setSessions(env, email, []); };
@@ -498,7 +613,13 @@ async function adminAction(req, env, origin) {
     const link = `${origin}/reset?t=${await createResetToken(env, email, RESET_HOURS_ADMIN)}`;
     return adminHome(env, `已產生 ${email} 的重設密碼連結`, `<div class="card" style="margin:12px 0"><div class="small">把這個連結私訊給會員，${RESET_HOURS_ADMIN} 小時內有效、只能用一次：</div><input readonly value="${esc(link)}" onclick="this.select()" style="margin-top:6px;font-family:ui-monospace,monospace;font-size:13px"></div>`);
   }
-  if (action === "delete") { await dropSessions(); await deleteUser(env, email); return adminHome(env, `已刪除 ${email}`); }
+  if (action === "clearskool") {
+    await unbindHandle(env, u);
+    u.skool = undefined;
+    await putAccount(env, u);
+    return adminHome(env, `已清除 ${email} 的 Skool 帳號，對方下次進站時會被要求重新填寫。`);
+  }
+  if (action === "delete") { await dropSessions(); await deleteUser(env, u); return adminHome(env, `已刪除 ${email}`); }
   return adminHome(env, "不明的操作。");
 }
 
@@ -548,6 +669,8 @@ export default {
 
     const cu = await currentUser(env, req);
     if (!cu) return redirect("/login");
+    if (cu.user.status === "disabled") return statusPage("帳號已停用", "如有疑問請在 Skool 聯絡管理者。", cu.user.email);
+    if (!cu.user.skool) return path === "/skool" && req.method === "POST" ? handleSkool(req, env, cu) : skoolPage(cu.user.email);
     if (cu.user.status === "pending") return statusPage("等待核准中", "管理者確認你是 Skool 付費會員後就會開通，通常一天內。管理者核准後約 1 分鐘內生效，請重新整理這一頁。", cu.user.email);
     if (cu.user.status !== "active") return statusPage("帳號已停用", "如有疑問請在 Skool 聯絡管理者。", cu.user.email);
     if (cu.user.verified_month !== taipeiMonth()) {
