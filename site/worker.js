@@ -164,7 +164,7 @@ function loginPage(err = "", note = "", email = "") {
   return page("登入", `<h1>籌碼力度選股</h1><p>Skool 付費會員專屬。</p>${msg(err)}${msg(note, "ok")}
   <form method="post" action="/login">
     <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(email)}">
-    <label for="password">密碼</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+    <label for="password">本站密碼（註冊時設的，不是 Skool 密碼）</label><input id="password" name="password" type="password" autocomplete="current-password" required>
     <button class="full" type="submit">登入</button>
   </form>
   <p class="small" style="margin-top:16px"><a href="/forgot">忘記密碼？</a>・還沒有帳號？<a href="/register">用本月驗證碼註冊</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
@@ -174,7 +174,9 @@ function registerPage(env, err = "", email = "") {
   return page("註冊", `<h1>註冊會員帳號</h1><p>本月驗證碼在 Skool 付費課程裡：${skoolLink(env, "打開 Skool 課程看驗證碼")}。註冊後需等管理者核准。</p>${msg(err)}
   <form method="post" action="/register">
     <label for="email">Email（請用你 Skool 帳號的 email）</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(email)}">
-    <label for="password">密碼（至少 8 碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+    <label for="password">設定本站密碼（至少 8 碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+    <p class="small" style="margin:4px 0 0">這是籌碼力度網站自己的密碼，<b>不是 Skool 密碼</b>。請設一組和 Skool 不同的密碼；之後在 Skool 改密碼，這裡的密碼不會跟著變。</p>
+    <label for="password2">再輸入一次本站密碼</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
     <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required>
     <button class="full" type="submit">送出註冊</button>
   </form>
@@ -200,6 +202,7 @@ async function handleRegister(req, env, ip, origin) {
   if (await tooMany(env, `reg:${ip}`)) return registerPage(env, "嘗試次數太多，請 15 分鐘後再試。", email);
   if (!validEmail(email)) return registerPage(env, "Email 格式不正確。", email);
   if (password.length < 8) return registerPage(env, "密碼至少 8 碼。", email);
+  if (password !== String(f.get("password2") || "")) return registerPage(env, "兩次輸入的密碼不一樣。", email);
   if (!safeEqual(code, await monthCode(env, taipeiMonth()))) {
     await addFail(env, `reg:${ip}`);
     return registerPage(env, "驗證碼不正確，請確認是本月的驗證碼。", email);
@@ -208,7 +211,7 @@ async function handleRegister(req, env, ip, origin) {
   const { salt, hash, iter } = await hashPassword(password);
   await putUser(env, { email, salt, hash, iter, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
   await notifyAdmin(env, email, origin);
-  return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和密碼登入即可。</p><p><a href="/login">回登入頁</a></p>`);
+  return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和你在本站設的密碼登入（不是 Skool 密碼）。</p><p><a href="/login">回登入頁</a></p>`);
 }
 
 async function sendMail(env, to, subject, text) {
@@ -309,7 +312,7 @@ async function handleLogin(req, env, ip) {
   const { hash } = await hashPassword(password, u ? u.salt : "00".repeat(16), u ? u.iter || LEGACY_ITER : PBKDF2_ITER);
   if (!u || !safeEqual(hash, u.hash)) {
     await addFail(env, `login:${ip}`); await addFail(env, `login:${email}`);
-    return loginPage("Email 或密碼不正確。", "", email);
+    return loginPage("Email 或密碼不正確。請輸入你在本站註冊時設的密碼（不是 Skool 密碼，Skool 改密碼也不會影響這裡）；忘記的話按下方「忘記密碼」。", "", email);
   }
   if (u.status === "disabled") return loginPage("這個帳號已停用，如有疑問請在 Skool 聯絡管理者。", "", email);
   if ((u.iter || LEGACY_ITER) !== PBKDF2_ITER) Object.assign(u, await hashPassword(password));
@@ -373,7 +376,7 @@ function guidePage(env) {
   <h2>第一次使用</h2>
   <ol>
     <li>到 Skool 付費課程拿本月驗證碼（${skoolLink(env, "打開 Skool 課程")}）。</li>
-    <li>到<a href="/register">註冊頁</a>填 email（請用 Skool 帳號的 email）、密碼、驗證碼。</li>
+    <li>到<a href="/register">註冊頁</a>填 email（請用 Skool 帳號的 email）、驗證碼，並設定一組<b>本站專用的密碼</b>（不是 Skool 密碼）。</li>
     <li>等管理者確認你是付費會員後開通，通常幾小時內。</li>
     <li>到<a href="/login">登入頁</a>登入，就能看每天的清單。</li>
   </ol>
@@ -398,6 +401,7 @@ function guidePage(env) {
   <ul>
     <li><b>每月驗證</b>：每個月第一次進站要輸入新的驗證碼，碼在 Skool 付費課程裡，每月 1 號更新。</li>
     <li><b>裝置數</b>：一個帳號最多同時 2 台裝置登入，第 3 台登入時最舊的那台會被登出。</li>
+    <li><b>本站密碼和 Skool 密碼是分開的</b>：在 Skool 改密碼不會影響這裡，登入時請輸入你在本站註冊時設的密碼。</li>
     <li><b>忘記密碼</b>：到<a href="/forgot">忘記密碼</a>頁照指示重設。</li>
     <li><b>加到手機主畫面</b>：iPhone 用 Safari 打開網站 → 分享 → 加入主畫面；Android 用 Chrome 打開 → 右上角 ⋮ → 加到主畫面。</li>
     <li>帳號請勿共用或轉借；退出付費方案後，下個月起就無法登入。</li>
@@ -405,6 +409,7 @@ function guidePage(env) {
 
   <h2>常見問題</h2>
   <ul>
+    <li><b>密碼一直不對？</b>這裡要輸入的是本站註冊時設的密碼，不是 Skool 密碼。想不起來就到<a href="/forgot">忘記密碼</a>重設。</li>
     <li><b>驗證碼輸入錯誤？</b>確認是「本月」的碼，英文大小寫都可以。</li>
     <li><b>註冊後一直顯示等待核准？</b>管理者會盡快處理，太久的話在 Skool 私訊管理者。</li>
     <li><b>今天的資料還沒出來？</b>證交所約 16:30 公布資料，網站通常晚上更新，偶爾會延到隔天早上。</li>
