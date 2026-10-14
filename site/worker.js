@@ -23,7 +23,10 @@
 
 const SESSION_DAYS = 30;
 const MAX_DEVICES = 2;
-const PBKDF2_ITER = 100000;
+// 密碼雜湊次數。免費方案每個請求只有約 10ms CPU，10 萬次要 40ms 以上，登入會被拖慢甚至卡住，
+// 所以改成 1 萬次（搭配登入次數限制）。舊帳號存的是 10 萬次，下次登入成功時自動換成新的次數。
+const PBKDF2_ITER = 10000;
+const LEGACY_ITER = 100000;
 const enc = new TextEncoder();
 const RESET_HOURS_SELF = 1;   // 會員自己用 email 重設：連結 1 小時內有效
 const RESET_HOURS_ADMIN = 24; // 管理者產生給會員的連結：24 小時內有效
@@ -63,11 +66,11 @@ async function monthCode(env, ym) {
 }
 const normCode = (s) => String(s || "").trim().toUpperCase().replace(/[\s-]/g, "");
 
-async function hashPassword(password, saltHex) {
+async function hashPassword(password, saltHex, iter = PBKDF2_ITER) {
   const salt = saltHex ? Uint8Array.from(saltHex.match(/../g).map((h) => parseInt(h, 16))) : crypto.getRandomValues(new Uint8Array(16));
   const key = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: PBKDF2_ITER }, key, 256);
-  return { salt: hex(salt), hash: hex(bits) };
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: iter }, key, 256);
+  return { salt: hex(salt), hash: hex(bits), iter };
 }
 // 固定時間比較，避免從回應時間猜出內容
 function safeEqual(a, b) {
@@ -202,8 +205,8 @@ async function handleRegister(req, env, ip, origin) {
     return registerPage(env, "驗證碼不正確，請確認是本月的驗證碼。", email);
   }
   if (await getUser(env, email)) return registerPage(env, "這個 email 已經註冊過，請直接登入。", email);
-  const { salt, hash } = await hashPassword(password);
-  await putUser(env, { email, salt, hash, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
+  const { salt, hash, iter } = await hashPassword(password);
+  await putUser(env, { email, salt, hash, iter, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
   await notifyAdmin(env, email, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和密碼登入即可。</p><p><a href="/login">回登入頁</a></p>`);
 }
@@ -289,8 +292,8 @@ async function handleReset(req, env, url) {
   if (pw !== pw2) return resetPage(t, "兩次輸入的密碼不一樣。");
   const u = await getUser(env, email);
   if (!u) return resetExpired();
-  const { salt, hash } = await hashPassword(pw);
-  u.salt = salt; u.hash = hash;
+  const { salt, hash, iter } = await hashPassword(pw);
+  u.salt = salt; u.hash = hash; u.iter = iter;
   for (const sid of u.sessions || []) await env.SITE_KV.delete(`sess:${sid}`); // 改密碼後所有裝置都要重新登入
   u.sessions = [];
   await putUser(env, u);
@@ -303,12 +306,13 @@ async function handleLogin(req, env, ip) {
   const email = normEmail(f.get("email")), password = String(f.get("password") || "");
   if ((await tooMany(env, `login:${ip}`, 20)) || (await tooMany(env, `login:${email}`))) return loginPage("嘗試次數太多，請 15 分鐘後再試。", "", email);
   const u = await getUser(env, email);
-  const { hash } = await hashPassword(password, u ? u.salt : "00".repeat(16));
+  const { hash } = await hashPassword(password, u ? u.salt : "00".repeat(16), u ? u.iter || LEGACY_ITER : PBKDF2_ITER);
   if (!u || !safeEqual(hash, u.hash)) {
     await addFail(env, `login:${ip}`); await addFail(env, `login:${email}`);
     return loginPage("Email 或密碼不正確。", "", email);
   }
   if (u.status === "disabled") return loginPage("這個帳號已停用，如有疑問請在 Skool 聯絡管理者。", "", email);
+  if ((u.iter || LEGACY_ITER) !== PBKDF2_ITER) Object.assign(u, await hashPassword(password));
   // 建立登入；超過裝置上限就把最舊的登出
   const sid = randomId();
   await env.SITE_KV.put(`sess:${sid}`, JSON.stringify({ email, created: Date.now() }), { expirationTtl: SESSION_DAYS * 86400 });
