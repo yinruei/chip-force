@@ -54,13 +54,14 @@ jobs:
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           ADMIN_EMAIL: ${{ secrets.SITE_ADMIN_EMAIL }}
           MAIL_FROM: ${{ secrets.SITE_MAIL_FROM }}
+          GH_TOKEN: ${{ secrets.SITE_GH_TOKEN }}
         run: |
           export CLOUDFLARE_ACCOUNT_ID=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
           export CLOUDFLARE_API_TOKEN=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
           python3 - > secrets.json <<'PY'
           import json, os
           s = {"SITE_SECRET": os.environ["SITE_SECRET"].strip(), "ADMIN_PASSWORD": os.environ["SITE_ADMIN_PASSWORD"].strip()}
-          for k in ("RESEND_API_KEY", "ADMIN_EMAIL", "MAIL_FROM"):
+          for k in ("RESEND_API_KEY", "ADMIN_EMAIL", "MAIL_FROM", "GH_TOKEN"):
               if os.environ.get(k, "").strip(): s[k] = os.environ[k].strip()
           print(json.dumps(s))
           PY

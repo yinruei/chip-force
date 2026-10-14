@@ -12,8 +12,8 @@
 - `screenshot.py` — 每天產生頁面後，把上半部（摘要、力度排行、散布圖，含「非投資建議」註記）截成 PNG：`output/screenshots/latest_投信.png`、`latest_三大法人.png`，以及每天一份 `YYYYMMDD_*.png`（只留最近 30 天），給 Skool 課程用。
 - `METHOD.md` — 選股方法完整說明（內部文件：公式、參數、回測摘要、保密規則）。
 - `site/` — Skool 付費會員專屬網站（Cloudflare Worker + KV）：email 註冊需本月驗證碼、管理者在 `/admin` 核准、每月重新驗證、每帳號最多 2 台裝置。部署由 `.github/workflows/site.yml`，每天 `daily.yml` 會把 `output/dashboard.html` 上傳到 KV。說明見 `site/README.md`。免費方案每個請求只有約 10ms CPU：密碼雜湊用 PBKDF2 1 萬次（舊帳號 10 萬次，登入時自動升級），不要再調高；要檢查網站回應時間、CPU 與錯誤，手動跑 `.github/workflows/site-check.yml`。KV 各地同步約有 1 分鐘延遲，所以會員資料拆成 `user:`（帳密）、`st:`（狀態，只有註冊和管理者寫）、`vm:`（每月驗證）、`ss:`（登入裝置）四個 key（另有 `sk:<Skool 帳號>` → email，讓一個 Skool 帳號只能綁一個 email），各自只由負責的動作寫入；不要再合併成一筆整包寫回，否則會員登入/登出會蓋掉管理者的核准。
-- 自動化：GitHub 的 cron 常延遲 6–9 小時，所以 `daily.yml` 排了每小時一次（台北 17:47–23:47），當天已完成就自動略過。Claude 的「籌碼力度頁面每日更新」排程（週一到週五台北 17:33、19:33）會先檢查當天選股做了沒，沒做就直接觸發 `daily.yml` 並等它跑完，再把 `output/dashboard.html` 重新發佈到 Artifact：repo 裡最新交易日比 Artifact 上新才發佈。Claude 的排程不會 push，選股結果仍由 workflow commit 回 repo。
-- 排程：`.github/workflows/daily.yml`（週一至週五台北 17:47，自動 commit 回 repo）
+- 自動化：主要觸發是會員網站 Worker 的 Cloudflare 排程（`site/wrangler.toml` 的 `[triggers]`，週一到週五台北 17:30–22:30 每小時），Worker 的 `scheduled()` 用 Worker secret `GH_TOKEN`（GitHub secret `SITE_GH_TOKEN`，只有本 repo 的 Actions 寫入權限）呼叫 `daily.yml` 的 workflow_dispatch，帶 `auto=true`：當天已完成就略過。GitHub 自己的 cron（台北 17:47–23:47）常延遲 6–9 小時，只當備援。舊的 Claude 頁面排程已停用。
+- 排程：`.github/workflows/daily.yml`（自動 commit 回 repo）
 
 ## 常用指令
 

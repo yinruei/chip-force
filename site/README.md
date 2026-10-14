@@ -27,6 +27,7 @@ Skool 付費會員專屬的籌碼力度頁面。網址：`https://chip-force-sit
 | `SITE_ADMIN_PASSWORD` | 管理頁 `/admin` 的密碼 |
 | `RESEND_API_KEY` | 選填：Resend 的 API key，有人註冊時寄信通知管理者 |
 | `SITE_ADMIN_EMAIL` | 選填：收通知的 email。Resend 沒有驗證網域時，只能寄到你註冊 Resend 的那個 email |
+| `SITE_GH_TOKEN` | 選填但建議：只能觸發本 repo 工作流程的 GitHub token（fine-grained，Repository access 只選 `chip-force`，權限 Actions: Read and write）。設定後，Worker 的 Cloudflare 排程會在台北 17:30 起準時觸發每日選股 |
 | `SITE_MAIL_FROM` | 選填：寄件人，例如 `籌碼力度選股 <noreply@你的網域>`；沒有驗證網域就不要設（會用 onboarding@resend.dev） |
 
 設好或修改 secrets 後，都要到 Actions 執行一次「部署會員網站」才會生效。之後每天的選股跑完會自動把新頁面上傳。

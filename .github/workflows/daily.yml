@@ -2,8 +2,8 @@ name: 籌碼力度每日選股
 
 on:
   schedule:
-    # 週一到週五，每小時一次（台北 17:47–23:47；UTC 09:47–15:47）。
-    # 證交所法人資料約 16:30 前公布；GitHub 的排程常延遲 6–9 小時，所以排多次，已完成的當天會自動略過。
+    # 主要觸發改由 Cloudflare Worker 的排程（台北 17:30 起每小時，見 site/wrangler.toml），準時很多；
+    # 這裡的 GitHub 排程只當備援：GitHub 常延遲 6–9 小時，已完成的當天會自動略過。
     - cron: "47 9 * * 1-5"
     - cron: "47 10 * * 1-5"
     - cron: "47 11 * * 1-5"
@@ -17,6 +17,10 @@ on:
         description: "指定日期 YYYY-MM-DD，可用逗號分隔多天（留空＝今天）"
         required: false
         default: ""
+      auto:
+        description: "自動觸發（Cloudflare 排程用）：已完成的當天會略過"
+        required: false
+        default: "false"
 
 permissions:
   contents: write
@@ -49,7 +53,7 @@ jobs:
           while t.weekday()>4: t-=d.timedelta(days=1)
           print(t.strftime('%Y%m%d'))")
           echo "應有資料的交易日：$T"
-          if [ "${{ github.event_name }}" = "schedule" ] && [ -s "data/vol_$T.csv" ] && [ -f "output/${T}_三大法人.md" ]; then
+          if { [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.auto }}" = "true" ]; } && [ -s "data/vol_$T.csv" ] && [ -f "output/${T}_三大法人.md" ]; then
             echo "done=true" >> "$GITHUB_OUTPUT"; echo "已完成，略過"
           fi
 

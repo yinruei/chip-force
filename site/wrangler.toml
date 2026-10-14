@@ -7,6 +7,12 @@ compatibility_date = "2026-09-01"
 binding = "SITE_KV"
 id = "__SITE_KV_ID__"
 
+# 每日選股的準時觸發：週一到週五 UTC 09:30–14:30 每小時（台北 17:30–22:30）。
+# Worker 會呼叫 GitHub 執行「籌碼力度每日選股」；當天已完成的會自動略過，所以多排幾次沒關係。
+[triggers]
+crons = ["30 9-14 * * 1-5"]
+
 [vars]
+GH_REPO = "yinruei/chip-force"
 # 放本月驗證碼的 Skool 課程網址（註冊頁、驗證頁、使用說明會連到這裡）
 SKOOL_URL = "https://www.skool.com/fosi-trading-1190/classroom/f2d532b7?md=38579a96eb5a4c3faeaeb2d3c9c4b917"

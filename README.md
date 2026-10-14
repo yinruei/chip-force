@@ -10,7 +10,7 @@
 
 1. 本專案就是這個 private repo（`yinruei/chip-force`），排程檔為 `.github/workflows/daily.yml`。
 2. 到 repo 的 **Actions** 頁選「籌碼力度每日選股」，按一次 **Run workflow** 做第一次回補（約 10–20 分鐘）。
-3. 之後每個交易日台北時間 **17:47** 自動執行，結果在：
+3. 之後每個交易日台北時間 **17:30** 起自動執行（由會員網站的 Cloudflare 排程觸發，見 `site/README.md`），結果在：
    - `output/latest_三大法人.md`、`output/latest_投信.md`（最新一天）
    - `output/YYYYMMDD_*_顯著買超.csv`（完整清單）
    - 每次執行的 Actions 摘要頁也會直接顯示表格

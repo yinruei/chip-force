@@ -19,6 +19,8 @@
 // 選填：RESEND_API_KEY + ADMIN_EMAIL（有人註冊時寄信通知管理者）
 //       再加上 MAIL_FROM（Resend 已驗證的網域寄件人）才會開放會員自己用 email 重設密碼
 // 變數：SKOOL_URL（放本月驗證碼的 Skool 課程網址，在 wrangler.toml 的 [vars]）
+// 選用 GH_TOKEN（只能觸發 GH_REPO 工作流程的 GitHub token）：有設定時，wrangler.toml 的排程會
+//   準時觸發每日選股（GitHub 自己的排程常延遲好幾小時）
 // ============================================================
 
 const SESSION_DAYS = 30;
@@ -624,7 +626,21 @@ async function adminAction(req, env, origin) {
 }
 
 // ---------- 路由 ----------
+// Cloudflare 排程 → 觸發 GitHub 每日選股（auto=true：當天已完成就略過）
+async function triggerDaily(env) {
+  if (!env.GH_TOKEN) return console.log("沒有設定 GH_TOKEN，略過觸發");
+  const r = await fetch(`https://api.github.com/repos/${env.GH_REPO}/actions/workflows/daily.yml/dispatches`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${env.GH_TOKEN}`, Accept: "application/vnd.github+json", "User-Agent": "chip-force-site", "X-GitHub-Api-Version": "2022-11-28" },
+    body: JSON.stringify({ ref: "main", inputs: { auto: "true" } }),
+  });
+  console.log("觸發每日選股", r.status, r.ok ? "" : await r.text());
+}
+
 export default {
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(triggerDaily(env));
+  },
   async fetch(req, env) {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
