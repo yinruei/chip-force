@@ -102,11 +102,36 @@ async function addFail(env, key) {
   await env.SITE_KV.put(`rl:${key}`, String(n + 1), { expirationTtl: 900 });
 }
 
-const getUser = async (env, email) => {
-  const raw = await env.SITE_KV.get(`user:${email}`);
-  return raw ? JSON.parse(raw) : null;
-};
-const putUser = (env, u) => env.SITE_KV.put(`user:${u.email}`, JSON.stringify(u));
+// 會員資料分成四個 key，各自只由該改它的動作寫入。KV 各地同步會延遲約 1 分鐘，
+// 以前整筆資料放在一起時，會員登入/登出會把舊的「待核准」寫回去，蓋掉管理者剛按的核准。
+//   user:<email>  帳號密碼（註冊、重設密碼、登入時升級雜湊）
+//   st:<email>    狀態 pending / active / disabled（只有註冊和管理者會寫）
+//   vm:<email>    已完成每月驗證的年月（會員輸入驗證碼）
+//   ss:<email>    登入中的裝置 session 清單（登入、登出、管理者）
+const ACCOUNT_FIELDS = ["email", "salt", "hash", "iter", "created"];
+async function getUser(env, email) {
+  const [raw, st, vm, ss] = await Promise.all(["user", "st", "vm", "ss"].map((p) => env.SITE_KV.get(`${p}:${email}`)));
+  if (!raw) return null;
+  const a = JSON.parse(raw);
+  const u = {
+    ...Object.fromEntries(ACCOUNT_FIELDS.map((k) => [k, a[k]])),
+    status: st ?? a.status ?? "pending",
+    verified_month: vm ?? a.verified_month ?? "",
+    sessions: ss ? JSON.parse(ss) : a.sessions || [],
+  };
+  // 舊版資料：第一次讀到時把欄位搬到各自的 key
+  if (st === null) await setStatus(env, email, u.status);
+  if (vm === null && u.verified_month) await setVerified(env, email, u.verified_month);
+  if (ss === null) await setSessions(env, email, u.sessions);
+  return u;
+}
+const putAccount = (env, u) => env.SITE_KV.put(`user:${u.email}`, JSON.stringify(Object.fromEntries(ACCOUNT_FIELDS.map((k) => [k, u[k]]))));
+const setStatus = (env, email, status) => env.SITE_KV.put(`st:${email}`, status);
+const setVerified = (env, email, ym) => env.SITE_KV.put(`vm:${email}`, ym);
+const setSessions = (env, email, list) => env.SITE_KV.put(`ss:${email}`, JSON.stringify(list));
+async function deleteUser(env, email) {
+  for (const p of ["user", "st", "vm", "ss"]) await env.SITE_KV.delete(`${p}:${email}`);
+}
 
 async function currentUser(env, req) {
   const sid = cookies(req).sid;
@@ -209,7 +234,10 @@ async function handleRegister(req, env, ip, origin) {
   }
   if (await getUser(env, email)) return registerPage(env, "這個 email 已經註冊過，請直接登入。", email);
   const { salt, hash, iter } = await hashPassword(password);
-  await putUser(env, { email, salt, hash, iter, status: "pending", created: new Date().toISOString(), verified_month: taipeiMonth(), sessions: [] });
+  await setStatus(env, email, "pending");
+  await setVerified(env, email, taipeiMonth());
+  await setSessions(env, email, []);
+  await putAccount(env, { email, salt, hash, iter, created: new Date().toISOString() });
   await notifyAdmin(env, email, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和你在本站設的密碼登入（不是 Skool 密碼）。</p><p><a href="/login">回登入頁</a></p>`);
 }
@@ -298,8 +326,8 @@ async function handleReset(req, env, url) {
   const { salt, hash, iter } = await hashPassword(pw);
   u.salt = salt; u.hash = hash; u.iter = iter;
   for (const sid of u.sessions || []) await env.SITE_KV.delete(`sess:${sid}`); // 改密碼後所有裝置都要重新登入
-  u.sessions = [];
-  await putUser(env, u);
+  await setSessions(env, email, []);
+  await putAccount(env, u);
   await env.SITE_KV.delete(`rst:${t}`);
   return redirect("/login?m=reset");
 }
@@ -315,13 +343,13 @@ async function handleLogin(req, env, ip) {
     return loginPage("Email 或密碼不正確。請輸入你在本站註冊時設的密碼（不是 Skool 密碼，Skool 改密碼也不會影響這裡）；忘記的話按下方「忘記密碼」。", "", email);
   }
   if (u.status === "disabled") return loginPage("這個帳號已停用，如有疑問請在 Skool 聯絡管理者。", "", email);
-  if ((u.iter || LEGACY_ITER) !== PBKDF2_ITER) Object.assign(u, await hashPassword(password));
+  if ((u.iter || LEGACY_ITER) !== PBKDF2_ITER) await putAccount(env, Object.assign(u, await hashPassword(password)));
   // 建立登入；超過裝置上限就把最舊的登出
   const sid = randomId();
   await env.SITE_KV.put(`sess:${sid}`, JSON.stringify({ email, created: Date.now() }), { expirationTtl: SESSION_DAYS * 86400 });
   u.sessions = [...(u.sessions || []), sid];
   while (u.sessions.length > MAX_DEVICES) await env.SITE_KV.delete(`sess:${u.sessions.shift()}`);
-  await putUser(env, u);
+  await setSessions(env, email, u.sessions);
   return redirect("/", { "Set-Cookie": setCookie("sid", sid, SESSION_DAYS * 86400) });
 }
 
@@ -329,8 +357,7 @@ async function handleLogout(req, env) {
   const cu = await currentUser(env, req);
   if (cu) {
     await env.SITE_KV.delete(`sess:${cu.sid}`);
-    cu.user.sessions = (cu.user.sessions || []).filter((s) => s !== cu.sid);
-    await putUser(env, cu.user);
+    await setSessions(env, cu.user.email, cu.user.sessions.filter((s) => s !== cu.sid));
   }
   return redirect("/login?m=out", { "Set-Cookie": setCookie("sid", "", 0) });
 }
@@ -342,8 +369,7 @@ async function handleVerify(req, env, ip, cu) {
     await addFail(env, `verify:${cu.user.email}`);
     return verifyPage(env, cu.user.email, "驗證碼不正確，請確認是本月的驗證碼。");
   }
-  cu.user.verified_month = taipeiMonth();
-  await putUser(env, cu.user);
+  await setVerified(env, cu.user.email, taipeiMonth());
   return redirect("/");
 }
 
@@ -464,15 +490,15 @@ async function adminAction(req, env, origin) {
   const email = normEmail(f.get("email")), action = String(f.get("action") || "");
   const u = await getUser(env, email);
   if (!u) return adminHome(env, "找不到這個帳號。");
-  const dropSessions = async () => { for (const s of u.sessions || []) await env.SITE_KV.delete(`sess:${s}`); u.sessions = []; };
-  if (action === "approve") { u.status = "active"; await putUser(env, u); return adminHome(env, `已開通 ${email}`); }
-  if (action === "disable") { u.status = "disabled"; await dropSessions(); await putUser(env, u); return adminHome(env, `已停用 ${email}`); }
-  if (action === "logout") { await dropSessions(); await putUser(env, u); return adminHome(env, `已將 ${email} 全部登出`); }
+  const dropSessions = async () => { for (const s of u.sessions) await env.SITE_KV.delete(`sess:${s}`); await setSessions(env, email, []); };
+  if (action === "approve") { await setStatus(env, email, "active"); return adminHome(env, `已開通 ${email}。約 1 分鐘內生效，請對方重新整理頁面。`); }
+  if (action === "disable") { await setStatus(env, email, "disabled"); await dropSessions(); return adminHome(env, `已停用 ${email}`); }
+  if (action === "logout") { await dropSessions(); return adminHome(env, `已將 ${email} 全部登出`); }
   if (action === "resetlink") {
     const link = `${origin}/reset?t=${await createResetToken(env, email, RESET_HOURS_ADMIN)}`;
     return adminHome(env, `已產生 ${email} 的重設密碼連結`, `<div class="card" style="margin:12px 0"><div class="small">把這個連結私訊給會員，${RESET_HOURS_ADMIN} 小時內有效、只能用一次：</div><input readonly value="${esc(link)}" onclick="this.select()" style="margin-top:6px;font-family:ui-monospace,monospace;font-size:13px"></div>`);
   }
-  if (action === "delete") { await dropSessions(); await env.SITE_KV.delete(`user:${email}`); return adminHome(env, `已刪除 ${email}`); }
+  if (action === "delete") { await dropSessions(); await deleteUser(env, email); return adminHome(env, `已刪除 ${email}`); }
   return adminHome(env, "不明的操作。");
 }
 
@@ -522,7 +548,7 @@ export default {
 
     const cu = await currentUser(env, req);
     if (!cu) return redirect("/login");
-    if (cu.user.status === "pending") return statusPage("等待核准中", "管理者確認你是 Skool 付費會員後就會開通，通常一天內。", cu.user.email);
+    if (cu.user.status === "pending") return statusPage("等待核准中", "管理者確認你是 Skool 付費會員後就會開通，通常一天內。管理者核准後約 1 分鐘內生效，請重新整理這一頁。", cu.user.email);
     if (cu.user.status !== "active") return statusPage("帳號已停用", "如有疑問請在 Skool 聯絡管理者。", cu.user.email);
     if (cu.user.verified_month !== taipeiMonth()) {
       if (path === "/verify" && req.method === "POST") return handleVerify(req, env, ip, cu);
