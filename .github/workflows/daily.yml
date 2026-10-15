@@ -74,6 +74,12 @@ jobs:
           for d in "${DS[@]}"; do python chip_force.py --investor 投信 --mode 穩健 --date "$d"; done
           python chip_force.py --investor 投信 --mode 穩健
 
+      # 頁面的收盤價與漲跌幅用 data/px_*.csv；只補缺的日子，失敗不影響其他步驟
+      - name: 補抓近期收盤價
+        if: steps.chk.outputs.done != 'true'
+        continue-on-error: true
+        run: python fill_prices.py
+
       - name: 產生視覺化頁面
         if: steps.chk.outputs.done != 'true'
         run: python build_dashboard.py
@@ -91,7 +97,7 @@ jobs:
         run: |
           pip install -q playwright==1.48.0
           python -m playwright install --with-deps chromium > /dev/null
-          sudo apt-get install -y -qq fonts-noto-cjk > /dev/null
+          sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji > /dev/null
           python screenshot.py
 
       - name: 顯示在 Actions 摘要

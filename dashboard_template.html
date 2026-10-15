@@ -18,6 +18,8 @@
   --s2: #eb6834;      /* 買方轉強 */
   --s2-soft: #fbe3d8;
   --focus: #2a78d6;
+  --up: #d1343a; --down: #148a4c;
+  --hot-bg: #fde4d6; --hot: #b2441a; --new-bg: #dcf0e2; --new: #1d7a3e; --both-bg: #f5ebc4; --both: #7f6200;
   --font-ui: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
@@ -26,12 +28,14 @@
     --bg: #101213; --surface: #1a1a19; --ink: #f2f3f3; --ink-2: #bcc1c4; --ink-3: #8b9196;
     --line: #2c2f31; --grid: #262829; --s1: #3987e5; --s1-soft: #1c2f48; --s2: #d95926; --s2-soft: #3b2418;
     --focus: #6da7ec; color-scheme: dark;
+    --up: #f0686c; --down: #46c47c; --hot-bg: #43261a; --hot: #f39a6d; --new-bg: #183626; --new: #6fd194; --both-bg: #3a3214; --both: #e6c65a;
   }
 }
 :root[data-theme="dark"] {
   --bg: #101213; --surface: #1a1a19; --ink: #f2f3f3; --ink-2: #bcc1c4; --ink-3: #8b9196;
   --line: #2c2f31; --grid: #262829; --s1: #3987e5; --s1-soft: #1c2f48; --s2: #d95926; --s2-soft: #3b2418;
   --focus: #6da7ec; color-scheme: dark;
+    --up: #f0686c; --down: #46c47c; --hot-bg: #43261a; --hot: #f39a6d; --new-bg: #183626; --new: #6fd194; --both-bg: #3a3214; --both: #e6c65a;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -72,7 +76,7 @@ button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2p
 
 /* 排行長條 */
 .bars { display: flex; flex-direction: column; gap: 6px; }
-.bar { display: grid; grid-template-columns: 7.2em 1fr 3.4em; align-items: center; gap: 8px; min-width: 0; cursor: default; }
+.bar { display: grid; grid-template-columns: 10.5em 1fr 3.4em; align-items: center; gap: 8px; min-width: 0; cursor: default; }
 .bar .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar .nm i { font-style: normal; font-family: var(--font-num); font-size: 11.5px; color: var(--ink-3); margin-right: 5px; }
 .bar .tr { height: 14px; background: var(--grid); border-radius: 0 4px 4px 0; position: relative; }
@@ -93,7 +97,7 @@ button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2p
 /* 清單 */
 .tabs { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
 .tbl-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; min-width: 640px; }
+table { border-collapse: collapse; width: 100%; min-width: 860px; }
 th, td { padding: 7px 12px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
 th { font-weight: 500; font-size: 12px; color: var(--ink-3); background: var(--bg); position: sticky; top: 0; }
@@ -105,6 +109,15 @@ tbody tr:hover { background: var(--bg); }
 tbody tr:last-child td { border-bottom: 0; }
 .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--grid); color: var(--ink-2); }
 .cross { color: var(--s2); font-weight: 700; }
+.bdg { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap; vertical-align: 1px; font-weight: 500; }
+.bdg.hot { background: var(--hot-bg); color: var(--hot); }
+.bdg.new { background: var(--new-bg); color: var(--new); }
+.bdg.both { background: var(--both-bg); color: var(--both); }
+.bar .nm .bdg { font-size: 10.5px; padding: 0 4px; margin-left: 3px; }
+.up { color: var(--up); } .down { color: var(--down); }
+a.code { color: inherit; text-decoration: underline dotted var(--ink-3); text-underline-offset: 3px; }
+a.code:hover { color: var(--s1); }
+.tbl-hint { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-3); }
 .mkt-otc { background: var(--s2-soft); }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
@@ -132,7 +145,7 @@ footer { font-size: 12px; color: var(--ink-3); }
   .panels { grid-template-columns: 1fr; }
 }
 @media (max-width: 420px) {
-  .bar { grid-template-columns: 6.2em 1fr 3.2em; }
+  .bar { grid-template-columns: 8.6em 1fr 3.2em; }
   .kpi .v { font-size: 26px; } .kpi.hero .v { font-size: 38px; }
 }
 @media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
@@ -180,6 +193,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div class="seg" id="listSeg" role="group" aria-label="清單"></div>
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
+    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　點代號可開 Yahoo 股市看走勢</p>
     <div class="tbl-scroll">
       <table>
         <thead><tr id="thead"></tr></thead>
@@ -223,7 +237,7 @@ const DATA = __DATA__;
 const P = DATA.params;
 const INV = [["投信", "投信（投本比）"], ["三大法人", "三大法人"]];
 const COLS = [
-  ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["x", "轉強"]
+  ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
@@ -235,6 +249,12 @@ const WD = "日一二三四五六";
 const dlabel = d => { const dd = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6)); return `${d.slice(0, 4) !== dates[0].slice(0, 4) ? d.slice(0, 4) + "/" : ""}${+d.slice(4, 6)}/${+d.slice(6)}（${WD[dd.getDay()]}）`; };
 const dlong = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
 const MODE = { "三大法人": "靈敏", "投信": "穩健" };
+// 標記：連續上榜（2 天以上）、近 10 日新上榜、雙榜；short 用在排行長條（位置較窄）
+const badges = (r, short) => (r.s >= 2 ? `<span class="bdg hot">🔥${short ? "" : "連"}${r.s}</span>` : "")
+  + (r.w ? `<span class="bdg new">新</span>` : "") + (r.b ? `<span class="bdg both">⭐${short ? "" : "雙榜"}</span>` : "");
+const pct = g => g === null || g === undefined ? "—" : `<span class="${g > 0 ? "up" : g < 0 ? "down" : ""}">${g > 0 ? "+" : ""}${g.toFixed(2)}%</span>`;
+const price = p => p ? (p >= 100 ? p.toFixed(1) : p.toFixed(2)) : "—";
+const yahoo = c => `https://tw.stock.yahoo.com/quote/${c}`;
 
 function seg(el, items, key, onPick) {
   el.innerHTML = "";
@@ -285,7 +305,8 @@ function render() {
   $("kTopSub").textContent = top ? `${top.c} ${top.n}，佔股本比 ${top.r}%，成交 ${fmt(top.v)} 張` : "今天沒有達標的股票";
   $("kPicks").textContent = e.picks.length;
   const otc = e.picks.filter(r => r.m === "上櫃").length;
-  $("kPicksSub").textContent = `上市 ${e.picks.length - otc}・上櫃 ${otc}`;
+  const nHot = e.picks.filter(r => r.s >= 2).length, nNew = e.picks.filter(r => r.w).length, nBoth = e.picks.filter(r => r.b).length;
+  $("kPicksSub").innerHTML = `上市 ${e.picks.length - otc}・上櫃 ${otc}<br>連續上榜 ${nHot}・新上榜 ${nNew}・雙榜 ${nBoth}`;
   $("kStrong").textContent = e.strong.length;
   $("kStrongSub").textContent = "短期買盤轉強，尚未達顯著門檻";
   $("kCut").textContent = e.before.picks - e.picks.length;
@@ -303,7 +324,7 @@ function showTip(html, x, y) {
   tip.style.top = (y + h + 20 > innerHeight ? y - h - 12 : y + 14) + "px";
 }
 const hideTip = () => { tip.style.opacity = 0; };
-const tipHtml = r => `<b>${r.c} ${r.n}</b>（${r.m}）<br><span class="num">力度 ${r.f.toFixed(2)}・佔股本比 ${r.r}%<br>法人 ${fmt(r.net)} 張・成交 ${fmt(r.v)} 張</span>`;
+const tipHtml = r => `<b>${r.c} ${r.n}</b>（${r.m}）${r.s >= 2 ? `・連續 ${r.s} 日上榜` : ""}${r.w ? "・新上榜" : ""}${r.b ? "・雙榜" : ""}<br><span class="num">收盤 ${price(r.p)}（${r.g === null || r.g === undefined ? "—" : (r.g > 0 ? "+" : "") + r.g.toFixed(2) + "%"}）<br>力度 ${r.f.toFixed(2)}・佔股本比 ${r.r}%<br>法人 ${fmt(r.net)} 張・成交 ${fmt(r.v)} 張</span>`;
 
 function renderBars(e) {
   const box = $("bars"); box.innerHTML = "";
@@ -312,7 +333,7 @@ function renderBars(e) {
   const max = Math.max(...rows.map(r => r.f));
   rows.forEach(r => {
     const d = document.createElement("div"); d.className = "bar"; d.tabIndex = 0;
-    d.innerHTML = `<div class="nm"><i>${r.c}</i>${r.n}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
+    d.innerHTML = `<div class="nm"><i>${r.c}</i>${r.n}${badges(r, true)}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
     const ev = ev2 => { const b = d.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX ?? b.left + 40, ev2.clientY ?? b.bottom); };
     d.onmousemove = ev; d.onfocus = ev; d.onmouseleave = hideTip; d.onblur = hideTip;
     box.appendChild(d);
@@ -356,6 +377,7 @@ function renderScatter(e) {
   });
 }
 
+const numOr = v => (v === null || v === undefined || v === "" ? -1e9 : +v);
 function renderTable(e) {
   seg($("listSeg"), [["picks", `顯著買超 ${e.picks.length}`], ["strong", `買方轉強 ${e.strong.length}`]], "list", () => renderTable(cur()));
   const head = $("thead"); head.innerHTML = "";
@@ -369,9 +391,9 @@ function renderTable(e) {
   const q = state.q.trim().toLowerCase();
   let rows = e[state.list].filter(r => !q || r.c.includes(q) || r.n.toLowerCase().includes(q));
   const [k, dir] = state.sort;
-  rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (+a[k] - +b[k])) * dir);
+  rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num">${r.c}</td><td>${r.n}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="8" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num"><a class="code" href="${yahoo(r.c)}" target="_blank" rel="noopener" title="在 Yahoo 股市開啟 ${r.c}">${r.c}</a></td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); }, 120); });

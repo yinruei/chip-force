@@ -42,3 +42,7 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 
 ## 選股方法保密
 會員看得到的地方（`dashboard_template.html`、頁面裡的 `DATA`、`site/worker.js` 的使用說明 `/guide`、Skool 截圖）都不要寫出公式或參數（60 日、z、標準差、門檻 2、0.05%、1000 張、20/60 日均線）。頁面資料只放門檻值 `params.k` 畫虛線，力度欄位叫 `f`、畫面上叫「力度」。
+
+## 選股頁資料欄位
+每檔：`c` 代號、`n` 名稱、`m` 市場、`v` 成交張數、`net` 法人買賣超(張)、`r` 佔股本比、`f` 力度、`x` 買方轉強、`p` 收盤、`g` 漲跌%（和前一交易日收盤比，來自 `data/px_*.csv`，由 `fill_prices.py` 每天補抓）、顯著買超另有 `s` 連續上榜天數、`w` 近 10 日首次上榜、`b` 投信與三大法人雙榜（`build_dashboard.py` 的 `add_tags`）。
+會員網站有 manifest 與主畫面圖示（`site/icons.js` 由 `site/icon.svg` 轉成 PNG 內嵌），手機加到主畫面會像 APP 全螢幕開啟。

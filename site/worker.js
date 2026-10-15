@@ -23,6 +23,8 @@
 //   準時觸發每日選股（GitHub 自己的排程常延遲好幾小時）
 // ============================================================
 
+import { ICON_512, ICON_192, ICON_180 } from "./icons.js";
+
 const SESSION_DAYS = 30;
 const MAX_DEVICES = 2;
 // 密碼雜湊次數。免費方案每個請求只有約 10ms CPU，10 萬次要 40ms 以上，登入會被拖慢甚至卡住，
@@ -36,6 +38,27 @@ const DEFAULT_SKOOL_URL = "https://www.skool.com/fosi-trading-1190/classroom/f2d
 const skoolUrl = (env) => env.SKOOL_URL || DEFAULT_SKOOL_URL;
 // 沒有驗證過的寄件網域時，Resend 只能寄給帳號本人，所以要有 MAIL_FROM 才開放會員自助重設
 const selfResetOn = (env) => !!(env.RESEND_API_KEY && env.MAIL_FROM);
+
+// ---------- 加到主畫面（像 APP 一樣全螢幕開啟） ----------
+const APP_NAME = "籌碼力度選股";
+const THEME = "#0b1d44";
+const APP_HEAD = `<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="${THEME}"><link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="${APP_NAME}"><meta name="apple-mobile-web-app-status-bar-style" content="default">`;
+const MANIFEST = JSON.stringify({
+  name: APP_NAME, short_name: APP_NAME, start_url: "/", scope: "/", display: "standalone",
+  background_color: "#f3f4f5", theme_color: THEME, lang: "zh-Hant",
+  icons: [
+    { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+  ],
+});
+const ICONS = { "/icon-512.png": ICON_512, "/icon-192.png": ICON_192, "/apple-touch-icon.png": ICON_180 };
+function appAsset(path) {
+  if (path === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=86400" } });
+  const b64 = ICONS[path];
+  if (!b64) return null;
+  return new Response(Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0)), { headers: { "Content-Type": "image/png", "Cache-Control": "public, max-age=604800" } });
+}
 
 // ---------- 小工具 ----------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -188,7 +211,7 @@ h2{font-size:17px;margin:26px 0 6px}ul,ol{padding-left:1.3em;color:var(--ink-2);
 `;
 function page(title, body, { wide = false, status = 200 } = {}) {
   return new Response(
-    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
+    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
     { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } }
   );
 }
@@ -429,7 +452,7 @@ async function serveDashboard(env, cu) {
   // dashboard.html 是不含 <html>/<body> 的頁面片段（原本給 Artifact 用），這裡補上完整骨架
   const doc = /<!doctype/i.test(html)
     ? html.replace(/<body([^>]*)>/i, (m) => m + bar)
-    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
+    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
   return new Response(doc, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" },
   });
@@ -463,7 +486,9 @@ function guidePage(env) {
     <li><b>摘要卡</b>：力度最強的一檔、顯著買超檔數、買方轉強檔數，以及被成交量門檻濾掉幾檔。</li>
     <li><b>力度排行</b>：顯著買超前 15 名，長條越長代表力度越大。</li>
     <li><b>佔股本比與力度</b>：橫軸是佔股本比、縱軸是力度，虛線是顯著門檻。藍點是顯著買超、橘點是買方轉強；圓形是上市、菱形是上櫃。滑過或點一下點可以看詳細數字。</li>
-    <li><b>完整清單</b>：點欄位名稱可以排序，右上角可以搜尋代號或名稱。「轉強」欄打勾代表同時符合買方轉強。</li>
+    <li><b>完整清單</b>：點欄位名稱可以排序，右上角可以搜尋代號或名稱。「轉強」欄打勾代表同時符合買方轉強。點代號會在新分頁開啟 Yahoo 股市，可以看 K 線走勢。</li>
+    <li><b>收盤與漲跌%</b>：當天收盤價，以及和前一個交易日收盤相比的漲跌幅（紅漲綠跌）。除權息當天會和官方漲跌不同。</li>
+    <li><b>標記</b>：<b>🔥連3</b>＝連續 3 個交易日都上榜（法人可能在持續布局）；<b>新</b>＝近 10 個交易日第一次上榜；<b>⭐雙榜</b>＝投信和三大法人同一天都上榜。「連續上榜」欄可以排序，找出連續最多天的股票。</li>
   </ul>
 
   <h2>名詞解釋</h2>
@@ -478,7 +503,7 @@ function guidePage(env) {
     <li><b>裝置數</b>：一個帳號最多同時 2 台裝置登入，第 3 台登入時最舊的那台會被登出。</li>
     <li><b>本站密碼和 Skool 密碼是分開的</b>：在 Skool 改密碼不會影響這裡，登入時請輸入你在本站註冊時設的密碼。</li>
     <li><b>忘記密碼</b>：到<a href="/forgot">忘記密碼</a>頁照指示重設。</li>
-    <li><b>加到手機主畫面</b>：iPhone 用 Safari 打開網站 → 分享 → 加入主畫面；Android 用 Chrome 打開 → 右上角 ⋮ → 加到主畫面。</li>
+    <li><b>加到手機主畫面</b>：iPhone 用 Safari 打開網站 → 分享 → 加入主畫面；Android 用 Chrome 打開 → 右上角 ⋮ → 加到主畫面（或「安裝應用程式」）。之後點主畫面的圖示，就會像 APP 一樣全螢幕打開。</li>
     <li>帳號請勿共用或轉借；退出付費方案後，下個月起就無法登入。</li>
   </ul>
 
@@ -645,6 +670,9 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
     const ip = req.headers.get("CF-Connecting-IP") || "local";
+    // 主畫面圖示與 manifest：公開，不需要登入
+    const asset = req.method === "GET" && appAsset(path);
+    if (asset) return asset;
     if (!env.SITE_SECRET || !env.ADMIN_PASSWORD) return page("尚未設定", "<h1>尚未設定</h1><p>請先設定 SITE_SECRET 與 ADMIN_PASSWORD。</p>", { status: 500 });
 
     // 只接受從本站送出的表單（防 CSRF）
