@@ -115,8 +115,6 @@ tbody tr:last-child td { border-bottom: 0; }
 .bdg.both { background: var(--both-bg); color: var(--both); }
 .bar .nm .bdg { font-size: 10.5px; padding: 0 4px; margin-left: 3px; }
 .up { color: var(--up); } .down { color: var(--down); }
-a.code { color: inherit; text-decoration: underline dotted var(--ink-3); text-underline-offset: 3px; }
-a.code:hover { color: var(--s1); }
 .tbl-hint { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-3); }
 .mkt-otc { background: var(--s2-soft); }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
@@ -193,7 +191,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div class="seg" id="listSeg" role="group" aria-label="清單"></div>
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
-    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　點代號可開 Yahoo 股市看走勢</p>
+    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜</p>
     <div class="tbl-scroll">
       <table>
         <thead><tr id="thead"></tr></thead>
@@ -254,7 +252,6 @@ const badges = (r, short) => (r.s >= 2 ? `<span class="bdg hot">🔥${short ? ""
   + (r.w ? `<span class="bdg new">新</span>` : "") + (r.b ? `<span class="bdg both">⭐${short ? "" : "雙榜"}</span>` : "");
 const pct = g => g === null || g === undefined ? "—" : `<span class="${g > 0 ? "up" : g < 0 ? "down" : ""}">${g > 0 ? "+" : ""}${g.toFixed(2)}%</span>`;
 const price = p => p ? (p >= 100 ? p.toFixed(1) : p.toFixed(2)) : "—";
-const yahoo = c => `https://tw.stock.yahoo.com/quote/${c}`;
 
 function seg(el, items, key, onPick) {
   el.innerHTML = "";
@@ -393,7 +390,7 @@ function renderTable(e) {
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num"><a class="code" href="${yahoo(r.c)}" target="_blank" rel="noopener" title="在 Yahoo 股市開啟 ${r.c}">${r.c}</a></td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num">${r.c}</td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); }, 120); });
