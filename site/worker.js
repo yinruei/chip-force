@@ -187,7 +187,8 @@ async function isAdmin(env, req) {
 // ---------- 版面 ----------
 const STYLE = `
 :root{--bg:#f3f4f5;--surface:#fcfcfb;--ink:#0f1112;--ink-2:#4a4f53;--ink-3:#7a8085;--line:#dfe2e4;--accent:#2a78d6;--bad:#b42318;--ok:#1a7f37}
-@media (prefers-color-scheme:dark){:root{--bg:#101213;--surface:#1a1a19;--ink:#f2f3f3;--ink-2:#bcc1c4;--ink-3:#8b9196;--line:#2c2f31;--accent:#3987e5;--bad:#f97066;--ok:#4ac26b;color-scheme:dark}}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101213;--surface:#1a1a19;--ink:#f2f3f3;--ink-2:#bcc1c4;--ink-3:#8b9196;--line:#2c2f31;--accent:#3987e5;--bad:#f97066;--ok:#4ac26b;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#101213;--surface:#1a1a19;--ink:#f2f3f3;--ink-2:#bcc1c4;--ink-3:#8b9196;--line:#2c2f31;--accent:#3987e5;--bad:#f97066;--ok:#4ac26b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;padding:32px 16px}
 .box{max-width:420px;margin:0 auto;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:28px}
 .wide{max-width:960px}
@@ -211,7 +212,7 @@ h2{font-size:17px;margin:26px 0 6px}ul,ol{padding-left:1.3em;color:var(--ink-2);
 `;
 function page(title, body, { wide = false, status = 200 } = {}) {
   return new Response(
-    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
+    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script><title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
     { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } }
   );
 }
@@ -452,7 +453,7 @@ async function serveDashboard(env, cu) {
   // dashboard.html 是不含 <html>/<body> 的頁面片段（原本給 Artifact 用），這裡補上完整骨架
   const doc = /<!doctype/i.test(html)
     ? html.replace(/<body([^>]*)>/i, (m) => m + bar)
-    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
+    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
   return new Response(doc, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" },
   });
@@ -482,6 +483,7 @@ function guidePage(env) {
   <h2>頁面怎麼看</h2>
   <ul>
     <li><b>交易日</b>：預設顯示最近 10 個交易日，按「更早」可以看更早以前的。</li>
+    <li><b>白天／夜晚</b>：右上「顯示」可以切換白天和夜晚模式，會記住你的選擇；沒選過的話會跟著手機或電腦的設定。</li>
     <li><b>看哪個法人</b>：切換「投信（投本比）」或「三大法人」。</li>
     <li><b>摘要卡</b>：力度最強的一檔、顯著買超檔數、買方轉強檔數，以及被成交量門檻濾掉幾檔。</li>
     <li><b>力度排行</b>：顯著買超前 15 名，長條越長代表力度越大。</li>

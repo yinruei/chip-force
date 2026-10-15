@@ -1,4 +1,5 @@
 <title>籌碼力度選股</title>
+<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+TC:wght@400;500;700&display=swap">
@@ -159,6 +160,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div id="viewWrap" hidden><span class="ctl-label">看什麼</span><div class="seg" id="viewSeg" role="group" aria-label="頁面"></div></div>
       <div id="dateWrap"><span class="ctl-label">交易日</span><div class="seg" id="dateSeg" role="group" aria-label="交易日"></div></div>
       <div><span class="ctl-label">看哪個法人</span><div class="seg" id="invSeg" role="group" aria-label="法人"></div></div>
+      <div><span class="ctl-label">顯示</span><div class="seg"><button type="button" id="themeBtn"></button></div></div>
     </div>
   </header>
 
@@ -459,5 +461,16 @@ function renderBtChart() {
     g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
   });
 }
+/* 白天／夜晚：預設跟著手機或電腦的設定，按了之後記住選擇（存在這台裝置） */
+const darkNow = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
+function paintThemeBtn() { $("themeBtn").textContent = darkNow() ? "☀️ 白天" : "🌙 夜晚"; $("themeBtn").setAttribute("aria-label", darkNow() ? "切換成白天模式" : "切換成夜晚模式"); }
+$("themeBtn").onclick = () => {
+  const t = darkNow() ? "light" : "dark";
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("cf-theme", t); } catch (e) {}
+  paintThemeBtn();
+};
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", paintThemeBtn);
+paintThemeBtn();
 render();
 </script>
