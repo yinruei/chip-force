@@ -9,8 +9,9 @@ id = "__SITE_KV_ID__"
 
 # 每日選股的準時觸發：週一到週五 UTC 09:30–14:30 每小時（台北 17:30–22:30）。
 # Worker 會呼叫 GitHub 執行「籌碼力度每日選股」；當天已完成的會自動略過，所以多排幾次沒關係。
+# 注意：Cloudflare 的星期數字 1 是星期日，寫 1-5 會變成日～四、漏掉週五，所以用英文縮寫。
 [triggers]
-crons = ["30 9-14 * * 1-5"]
+crons = ["30 9-14 * * MON-FRI"]
 
 [vars]
 GH_REPO = "yinruei/chip-force"
