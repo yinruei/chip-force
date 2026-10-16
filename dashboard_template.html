@@ -117,6 +117,31 @@ tbody tr:last-child td { border-bottom: 0; }
 .bar .nm .bdg { font-size: 10.5px; padding: 0 4px; margin-left: 3px; }
 .up { color: var(--up); } .down { color: var(--down); }
 .tbl-hint { margin: 0 0 8px; font-size: 12.5px; color: var(--ink-3); }
+tbody tr { cursor: pointer; }
+.bar, .pt { cursor: pointer; }
+tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+/* 個股明細 */
+.dlg { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / .45); display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
+.dlg-card { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 760px; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 12px; }
+.dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.dlg-head h2 { font-size: 20px; }
+.dlg-head .sub { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+.xbtn { font: inherit; font-size: 18px; line-height: 1; background: transparent; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; flex: none; }
+.dlg-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.dlg-stats > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
+.dlg-stats .k { font-size: 11.5px; color: var(--ink-3); }
+.dlg-stats .v { font-family: var(--font-num); font-size: 18px; font-weight: 500; }
+.dlg-chart h3 { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 2px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.dlg-chart h3 .lg { font-weight: 400; font-size: 12px; color: var(--ink-3); display: inline-flex; align-items: center; gap: 5px; }
+.dlg-chart h3 .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.dlg-chart svg { width: 100%; display: block; touch-action: pan-y; }
+.dlg-chart svg text { font-family: var(--font-num); font-size: 10.5px; fill: var(--ink-3); }
+.dlg-chart svg .lbl { font-family: var(--font-ui); fill: var(--ink-2); font-size: 11px; }
+.dlg-note { font-size: 12px; color: var(--ink-3); margin: 0; }
+.dlg-msg { padding: 28px 8px; text-align: center; color: var(--ink-3); }
+body.noscroll { overflow: hidden; }
+@media (max-width: 560px) { .dlg { padding: 0; } .dlg-card { border-radius: 0; min-height: 100%; border: 0; } .dlg-stats { grid-template-columns: 1fr 1fr; } }
 .mkt-otc { background: var(--s2-soft); }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
@@ -126,7 +151,7 @@ input[type="search"] { font: inherit; font-size: 13px; background: var(--surface
 .method b { color: var(--ink); font-weight: 500; }
 footer { font-size: 12px; color: var(--ink-3); }
 
-#tip { position: fixed; z-index: 10; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; max-width: 240px; opacity: 0; transition: opacity .08s; }
+#tip { position: fixed; z-index: 30; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.5; max-width: 240px; opacity: 0; transition: opacity .08s; }
 #tip b { font-weight: 700; }
 #tip .num { font-size: 12px; }
 
@@ -193,7 +218,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div class="seg" id="listSeg" role="group" aria-label="清單"></div>
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
-    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜</p>
+    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
       <table>
         <thead><tr id="thead"></tr></thead>
@@ -229,6 +254,13 @@ footer { font-size: 12px; color: var(--ink-3); }
   </div>
 
   <footer>資料來源：證交所、櫃買中心公開法人買賣超與成交資料。依公開資料統計，非投資建議。資料更新於 __UPDATED__（台北時間）。</footer>
+</div>
+<div id="dlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+  <div class="dlg-card">
+    <div class="dlg-head"><div><h2 id="dlgTitle"></h2><div class="sub" id="dlgSub"></div></div><button type="button" class="xbtn" id="dlgClose" aria-label="關閉">✕</button></div>
+    <div><div class="seg" id="dlgInv" role="group" aria-label="法人"></div></div>
+    <div id="dlgBody"></div>
+  </div>
 </div>
 <div id="tip" role="tooltip"></div>
 
@@ -335,6 +367,7 @@ function renderBars(e) {
     d.innerHTML = `<div class="nm"><i>${r.c}</i>${r.n}${badges(r, true)}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
     const ev = ev2 => { const b = d.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX ?? b.left + 40, ev2.clientY ?? b.bottom); };
     d.onmousemove = ev; d.onfocus = ev; d.onmouseleave = hideTip; d.onblur = hideTip;
+    d.onclick = () => openDetail(r); d.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
     box.appendChild(d);
   });
 }
@@ -373,6 +406,7 @@ function renderScatter(e) {
     const r = (g.dataset.g === "1" ? e.strong : e.picks)[+g.dataset.i];
     const ev = ev2 => { const b = g.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX || b.right, ev2.clientY || b.top); };
     g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
+    g.onclick = () => openDetail(r); g.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
   });
 }
 
@@ -392,10 +426,13 @@ function renderTable(e) {
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr><td class="num">${r.c}</td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
+const rowOf = tr => tr && cur()[state.list].find(r => r.c === tr.dataset.c);
+$("tbody").onclick = ev => { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); };
+$("tbody").onkeydown = ev => { if (ev.key === "Enter") { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); } };
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
-let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); }, 120); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); if (!$("dlg").hidden && SER) renderDetail(); }, 120); });
 
 /* ---- 回測 ---- */
 const BT_GROUPS = [["顯著買超", "var(--s1)"], ["買方轉強", "var(--s2)"]];
@@ -461,6 +498,137 @@ function renderBtChart() {
     g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
   });
 }
+/* ---- 個股明細：點股票才載入近 60 日資料（series.json） ---- */
+let SER = null, serLoading = null;
+const loadSeries = () => serLoading || (serLoading = fetch("series.json", { credentials: "same-origin" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(j => (SER = j)).catch(e => { serLoading = null; throw e; }));
+const SKEY = { "三大法人": ["i", "fi"], "投信": ["t", "ft"] };
+const det = { code: null, name: "", m: "", inv: null, last: null };
+// 某天在某法人清單的狀態：1 顯著買超、2 買方轉強、0 沒上榜
+const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : 0; };
+const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
+const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
+
+function openDetail(r) {
+  Object.assign(det, { code: r.c, name: r.n, m: r.m, inv: state.inv, last: document.activeElement });
+  hideTip();
+  $("dlg").hidden = false; document.body.classList.add("noscroll");
+  $("dlgClose").focus();
+  renderDetail();
+}
+function closeDetail() {
+  $("dlg").hidden = true; document.body.classList.remove("noscroll"); hideTip();
+  if (det.last && det.last.focus) det.last.focus();
+}
+$("dlgClose").onclick = closeDetail;
+$("dlg").onclick = ev => { if (ev.target === $("dlg")) closeDetail(); };
+addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("dlg").hidden) closeDetail(); });
+
+function renderDetail() {
+  const e = DATA.dates[state.date] && DATA.dates[state.date][det.inv];
+  const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
+  $("dlgTitle").textContent = `${det.code} ${det.name}`;
+  $("dlgSub").innerHTML = `${det.m}・${dlong(state.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
+  const box = $("dlgInv"); box.innerHTML = "";
+  INV.forEach(([val, label]) => {
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(det.inv === val));
+    b.onclick = () => { det.inv = val; renderDetail(); }; box.appendChild(b);
+  });
+  const body = $("dlgBody");
+  if (!SER) {
+    body.innerHTML = '<div class="dlg-msg">載入中…</div>';
+    loadSeries().then(renderDetail).catch(() => { body.innerHTML = '<div class="dlg-msg">明細資料暫時載入失敗，請重新整理後再試一次。</div>'; });
+    return;
+  }
+  const x = SER.s[det.code];
+  if (!x) { body.innerHTML = '<div class="dlg-msg">這檔目前沒有明細資料。</div>'; return; }
+  const D = SER.d, N = D.length;
+  const [kn, kf] = SKEY[det.inv];
+  const net = x[kn], force = x[kf], close = x.p;
+  const sel = D.indexOf(state.date) >= 0 ? D.indexOf(state.date) : N - 1;
+  const st = D.map(ds => listed(ds, det.inv, det.code));
+  const upto = st.slice(0, sel + 1);
+  let streak = 0; for (let i = sel; i >= 0 && st[i] === 1; i--) streak++;
+  const both = D.slice(0, sel + 1).filter(ds => listed(ds, "投信", det.code) === 1 && listed(ds, "三大法人", det.code) === 1).length;
+  body.innerHTML = `<div class="dlg-stats">
+      <div><div class="k">近 10 日上榜</div><div class="v">${upto.slice(-10).filter(v => v === 1).length} 次</div></div>
+      <div><div class="k">近 60 日上榜</div><div class="v">${upto.filter(v => v === 1).length} 次</div></div>
+      <div><div class="k">目前連續上榜</div><div class="v">${streak} 日</div></div>
+      <div><div class="k">雙榜天數（60 日）</div><div class="v">${both} 天</div></div>
+    </div>
+    <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
+    <div class="dlg-chart"><h3>力度</h3><svg id="cF" role="img" aria-label="近 60 日力度折線圖"></svg></div>
+    <div class="dlg-chart"><h3>收盤價</h3><svg id="cP" role="img" aria-label="近 60 日收盤價折線圖"></svg></div>
+    <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。價格未還原除權息。</p>`;
+
+  const W = Math.max(280, $("cNet").parentElement.clientWidth), m = { l: 46, r: 10 };
+  const step = (W - m.l - m.r) / N, bw = Math.max(1.5, step - 2);
+  const cx = i => m.l + (i + 0.5) * step;
+  const svgs = [];
+  function frame(svg, H, top, bot, lo, hi, ticks, fmtT) {
+    svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
+    const Y = v => top + (hi - v) / (hi - lo || 1) * (H - top - bot);
+    let s = `<rect x="${cx(sel) - step / 2}" y="${top}" width="${step}" height="${H - top - bot}" fill="var(--grid)"/>`;
+    const kept = [];
+    ticks.slice().sort((a, b) => b - a).forEach(t => { if (kept.every(k => Math.abs(Y(k) - Y(t)) >= 16)) kept.push(t); });
+    kept.forEach(t => { s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${m.l - 6}" y="${Y(t) + 3.5}" text-anchor="end">${fmtT(t)}</text>`; });
+    return { Y, s };
+  }
+  const xlabels = (H, bot) => [0, Math.floor((N - 1) / 2), N - 1].map(i => `<text x="${cx(i)}" y="${H - bot + 14}" text-anchor="${i === 0 ? "start" : i === N - 1 ? "end" : "middle"}">${md(D[i])}</text>`).join("");
+  const finish = (svg, s, H) => { svg.innerHTML = s + `<line class="xh" y1="0" y2="${H}" stroke="var(--ink-2)" stroke-width="1" visibility="hidden"/><rect class="hit" x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent"/>`; svgs.push(svg); };
+
+  // 1) 法人買賣超：長條＋上方的上榜標記（一張圖一個 y 軸）
+  { const svg = $("cNet"), H = 168, top = 20, bot = 20;
+    const lo = Math.min(0, ...net), hi = Math.max(0, ...net);
+    const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo, 0, hi].filter((v, i, a) => a.indexOf(v) === i), compact);
+    let s = s0;
+    net.forEach((v, i) => {
+      if (!v) return;
+      const x0 = cx(i) - bw / 2, y0 = Y(0), y1 = Y(v), h = Math.abs(y1 - y0), r = Math.min(3, bw / 2, h);
+      // 圓角只在資料端，貼著 0 軸那端是直角
+      const d = v > 0
+        ? `M${x0} ${y0}V${y1 + r}Q${x0} ${y1} ${x0 + r} ${y1}H${x0 + bw - r}Q${x0 + bw} ${y1} ${x0 + bw} ${y1 + r}V${y0}Z`
+        : `M${x0} ${y0}V${y1 - r}Q${x0} ${y1} ${x0 + r} ${y1}H${x0 + bw - r}Q${x0 + bw} ${y1} ${x0 + bw} ${y1 - r}V${y0}Z`;
+      s += `<path d="${d}" fill="${v > 0 ? "var(--up)" : "var(--down)"}"/>`;
+    });
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-3)"/>`;
+    st.forEach((v, i) => { if (v) s += `<circle cx="${cx(i)}" cy="9" r="4" fill="${v === 1 ? "var(--s1)" : "var(--s2)"}" stroke="var(--surface)" stroke-width="1.5"/>`; });
+    finish(svg, s + xlabels(H, bot), H); }
+
+  // 2) 力度：折線＋顯著門檻虛線
+  { const svg = $("cF"), H = 132, top = 10, bot = 20;
+    const lo = Math.min(0, Math.floor(Math.min(...force))), hi = Math.max(P.k + 1, Math.ceil(Math.max(...force)));
+    const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo, 0, P.k, hi].filter((v, i, a) => a.indexOf(v) === i), t => t);
+    let s = s0 + `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(P.k)}" y2="${Y(P.k)}" stroke="var(--ink-2)" stroke-dasharray="5 4"/><text class="lbl" x="${m.l + 4}" y="${Y(P.k) - 4}">顯著門檻</text>`;
+    s += `<path d="${force.map((v, i) => `${i ? "L" : "M"}${cx(i)} ${Y(v)}`).join("")}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round"/>`;
+    s += `<circle cx="${cx(sel)}" cy="${Y(force[sel])}" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`;
+    finish(svg, s + xlabels(H, bot), H); }
+
+  // 3) 收盤價：折線（缺資料的日子斷開）
+  { const svg = $("cP"), H = 132, top = 10, bot = 20;
+    const vals = close.filter(v => v), lo0 = vals.length ? Math.min(...vals) : 0, hi0 = vals.length ? Math.max(...vals) : 1, pad = (hi0 - lo0) * 0.08 || hi0 * 0.02 || 1;
+    const lo = lo0 - pad, hi = hi0 + pad;
+    const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo0, hi0].filter((v, i, a) => a.indexOf(v) === i), t => price(t));
+    let s = s0, d = "", pen = false;
+    close.forEach((v, i) => { if (v) { d += `${pen ? "L" : "M"}${cx(i)} ${Y(v)}`; pen = true; } else pen = false; });
+    s += `<path d="${d}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-linejoin="round"/>`;
+    if (close[sel]) s += `<circle cx="${cx(sel)}" cy="${Y(close[sel])}" r="4" fill="var(--ink-2)" stroke="var(--surface)" stroke-width="2"/>`;
+    finish(svg, s + xlabels(H, bot), H); }
+
+  // 十字線＋提示：三張圖同步
+  const LS = ["", "顯著買超", "買方轉強"];
+  const show = ev => {
+    const b = ev.currentTarget.ownerSVGElement.getBoundingClientRect(), px = (ev.clientX - b.left) * W / b.width;
+    const i = Math.max(0, Math.min(N - 1, Math.floor((px - m.l) / step)));
+    svgs.forEach(sv => { const l = sv.querySelector(".xh"); l.setAttribute("x1", cx(i)); l.setAttribute("x2", cx(i)); l.setAttribute("visibility", "visible"); });
+    const g = i > 0 && close[i] && close[i - 1] ? (close[i] / close[i - 1] - 1) * 100 : null;
+    showTip(`<b>${dlong(D[i])}</b>${st[i] ? `・${LS[st[i]]}` : ""}<br><span class="num">${det.inv} ${net[i] > 0 ? "+" : ""}${fmt(net[i])} 張<br>力度 ${force[i].toFixed(2)}<br>收盤 ${price(close[i])}${g === null ? "" : `（${g > 0 ? "+" : ""}${g.toFixed(2)}%）`}</span>`, ev.clientX, ev.clientY);
+  };
+  const hide = () => { svgs.forEach(sv => sv.querySelector(".xh").setAttribute("visibility", "hidden")); hideTip(); };
+  svgs.forEach(sv => { const h = sv.querySelector(".hit"); h.onpointermove = show; h.onpointerdown = show; h.onpointerleave = hide; });
+}
+
 /* 白天／夜晚：預設跟著手機或電腦的設定，按了之後記住選擇（存在這台裝置） */
 const darkNow = () => (document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark";
 function paintThemeBtn() { $("themeBtn").textContent = darkNow() ? "☀️ 白天" : "🌙 夜晚"; $("themeBtn").setAttribute("aria-label", darkNow() ? "切換成白天模式" : "切換成夜晚模式"); }

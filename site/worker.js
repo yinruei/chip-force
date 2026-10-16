@@ -489,6 +489,7 @@ function guidePage(env) {
     <li><b>力度排行</b>：顯著買超前 15 名，長條越長代表力度越大。</li>
     <li><b>佔股本比與力度</b>：橫軸是佔股本比、縱軸是力度，虛線是顯著門檻。藍點是顯著買超、橘點是買方轉強；圓形是上市、菱形是上櫃。滑過或點一下點可以看詳細數字。</li>
     <li><b>完整清單</b>：點欄位名稱可以排序，右上角可以搜尋代號或名稱。「轉強」欄打勾代表同時符合買方轉強。</li>
+    <li><b>個股明細</b>：點清單、力度排行或散布圖上的任一檔，會打開明細：近 60 個交易日的法人買賣超（紅＝買超、綠＝賣超，上方圓點是上榜的日子）、力度走勢和收盤價，以及近 10／60 日上榜次數、連續上榜天數、雙榜天數。可以在明細裡切換投信／三大法人；滑過或點圖表可以看每天的數字。按 ✕、Esc 或點旁邊空白處關閉。</li>
     <li><b>收盤與漲跌%</b>：當天收盤價，以及和前一個交易日收盤相比的漲跌幅（紅漲綠跌）。除權息當天會和官方漲跌不同。</li>
     <li><b>標記</b>：<b>🔥連3</b>＝連續 3 個交易日都上榜（法人可能在持續布局）；<b>新</b>＝近 10 個交易日第一次上榜；<b>⭐雙榜</b>＝投信和三大法人同一天都上榜。「連續上榜」欄可以排序，找出連續最多天的股票。</li>
   </ul>
@@ -724,6 +725,12 @@ export default {
       return verifyPage(env, cu.user.email);
     }
     if (path === "/" || path === "/verify") return serveDashboard(env, cu);
+    // 個股明細資料：和選股頁一樣，要已開通且完成本月驗證
+    if (path === "/series.json") {
+      const js = await env.SITE_KV.get("series");
+      if (!js) return new Response("{}", { status: 404, headers: { "Content-Type": "application/json" } });
+      return new Response(js, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=600" } });
+    }
     return new Response("Not found", { status: 404 });
   },
 };

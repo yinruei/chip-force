@@ -74,6 +74,46 @@ def load_volume_cached(d: dt.date):
     return {r["code"]: float(r["lots"]) for r in rows}, {r["market"] for r in rows}
 
 
+def build_series(out: dict, latest: dt.date) -> dict:
+    """個股明細（點股票時才載入）：近 KEEP_DAYS 個交易日、曾上榜股票的法人買賣超、力度、收盤價。
+    i／t＝三大法人／投信買賣超（張），fi／ft＝兩者的力度，p＝收盤價；陣列和 d（日期）一一對應。"""
+    w = PARAMS["window"]
+    days = c.collect(KEEP_DAYS + w, latest, include_otc=True, deadline=time.time() - 1)
+    codes = {r["c"] for e in out["dates"].values() for inv in e for lst in ("picks", "strong") for r in e[inv][lst]}
+    n = len(days)
+    net = {inv: {code: [0.0] * n for code in codes} for inv in MODES}
+    shares: dict[str, float] = {}
+    for i, (_, rows) in enumerate(days):
+        for r in rows:
+            code = r["code"]
+            if code not in codes:
+                continue
+            for inv in MODES:
+                net[inv][code][i] = r[inv] or 0.0
+            if r["shares"] > 0:
+                shares[code] = r["shares"]   # 和選股一樣用最新的發行股數
+    keep = range(max(w, n - KEEP_DAYS), n)
+    ds_keep = [days[i][0].strftime("%Y%m%d") for i in keep]
+    closes = [load_close(ds) for ds in ds_keep]
+    series = {}
+    for code in sorted(codes):
+        sh = shares.get(code)
+        if not sh:
+            continue
+        item = {}
+        for inv, (kn, kf) in {"三大法人": ("i", "fi"), "投信": ("t", "ft")}.items():
+            ratio = [x / sh * 100.0 for x in net[inv][code]]
+            fs = []
+            for t in keep:
+                m, sd = c.mean_std(ratio[t - w:t])
+                fs.append(round((ratio[t] - m) / sd, 2) if sd > 0 else 0.0)
+            item[kn] = [round(net[inv][code][t] / 1000) for t in keep]
+            item[kf] = fs
+        item["p"] = [cl.get(code) for cl in closes]
+        series[code] = item
+    return {"d": ds_keep, "s": series}
+
+
 def main() -> None:
     p = PARAMS
     need = max(p["window"], p["slow"]) + p["confirm"] + 1
@@ -114,6 +154,10 @@ def main() -> None:
     html = html.replace("__DATA__", json.dumps(out, ensure_ascii=False, separators=(",", ":"))).replace("__UPDATED__", now)
     c.OUT.mkdir(parents=True, exist_ok=True)
     (c.OUT / "dashboard.html").write_text(html, encoding="utf-8")
+    last = max(out["dates"])
+    ser = build_series(out, dt.date(int(last[:4]), int(last[4:6]), int(last[6:])))
+    (c.OUT / "series.json").write_text(json.dumps(ser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"series.json：{len(ser['s'])} 檔、{len(ser['d'])} 天")
     print(f"dashboard.html：{', '.join(out['dates'])}")
 
 

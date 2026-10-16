@@ -11,3 +11,10 @@ curl -fsS -X PUT -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-
   --data-binary @output/dashboard.html \
   "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/dashboard" > /dev/null
 echo "已上傳 dashboard.html 到會員網站"
+# 個股明細（點股票時才載入）
+if [ -f output/series.json ]; then
+  curl -fsS -X PUT -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" \
+    --data-binary @output/series.json \
+    "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/series" > /dev/null
+  echo "已上傳 series.json 到會員網站"
+fi

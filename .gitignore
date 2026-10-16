@@ -1,2 +1,5 @@
 data/*.tmp
 __pycache__/
+
+# 個股明細資料（每次產生頁面時重建，約 1MB，不必進版本控制）
+output/series.json
