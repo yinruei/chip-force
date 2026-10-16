@@ -33,6 +33,28 @@ jobs:
           PY
           curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" --data @q.json | python3 -m json.tool
 
+      - name: 排程設定、secrets 與排程執行紀錄
+        continue-on-error: true
+        run: |
+          ACC=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
+          TOK=$(printf %s "$CLOUDFLARE_API_TOKEN" | tr -d '[:space:]')
+          API=https://api.cloudflare.com/client/v4/accounts/$ACC/workers/scripts/chip-force-site
+          echo "== Worker 目前的排程（cron）"
+          curl -sS -H "Authorization: Bearer $TOK" "$API/schedules" | python3 -m json.tool
+          echo "== Worker 的 secrets（只列名稱）"
+          curl -sS -H "Authorization: Bearer $TOK" "$API/secrets" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('errors') or [x['name'] for x in d.get('result') or []])"
+          echo "== 過去 48 小時的排程執行紀錄"
+          SINCE=$(date -u -d '48 hours ago' +%Y-%m-%dT%H:%M:%SZ)
+          python3 - "$ACC" "$SINCE" > q2.json <<'Q'
+          import json, sys
+          acc, since = sys.argv[1:]
+          q = """query($acc: String!, $since: Time!) { viewer { accounts(filter: {accountTag: $acc}) {
+            workersInvocationsScheduled(limit: 100, filter: {scriptName: "chip-force-site", datetime_geq: $since}, orderBy: [datetime_ASC]) {
+              datetime cron status cpuTimeUs } } } }"""
+          print(json.dumps({"query": q, "variables": {"acc": acc, "since": since}}))
+          Q
+          curl -sS https://api.cloudflare.com/client/v4/graphql -H "Authorization: Bearer $TOK" -H "Content-Type: application/json" --data @q2.json | python3 -m json.tool
+
       - name: 量測回應時間並抓執行紀錄
         run: |
           export CLOUDFLARE_ACCOUNT_ID=$(printf %s "$CLOUDFLARE_ACCOUNT_ID" | tr -d '[:space:]')
