@@ -355,6 +355,8 @@ function showTip(html, x, y) {
   tip.style.top = (y + h + 20 > innerHeight ? y - h - 12 : y + 14) + "px";
 }
 const hideTip = () => { tip.style.opacity = 0; };
+// 只有用鍵盤切換焦點時才顯示提示；手機點擊或關掉明細後焦點回到原處，不顯示（手機沒有滑鼠移開，提示會一直留著）
+const kbFocus = el => { try { return el.matches(":focus-visible"); } catch (e) { return false; } };
 const tipHtml = r => `<b>${r.c} ${r.n}</b>（${r.m}）${r.s >= 2 ? `・連續 ${r.s} 日上榜` : ""}${r.w ? "・新上榜" : ""}${r.b ? "・雙榜" : ""}<br><span class="num">收盤 ${price(r.p)}（${r.g === null || r.g === undefined ? "—" : (r.g > 0 ? "+" : "") + r.g.toFixed(2) + "%"}）<br>力度 ${r.f.toFixed(2)}・佔股本比 ${r.r}%<br>法人 ${fmt(r.net)} 張・成交 ${fmt(r.v)} 張</span>`;
 
 function renderBars(e) {
@@ -366,7 +368,7 @@ function renderBars(e) {
     const d = document.createElement("div"); d.className = "bar"; d.tabIndex = 0;
     d.innerHTML = `<div class="nm"><i>${r.c}</i>${r.n}${badges(r, true)}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
     const ev = ev2 => { const b = d.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX ?? b.left + 40, ev2.clientY ?? b.bottom); };
-    d.onmousemove = ev; d.onfocus = ev; d.onmouseleave = hideTip; d.onblur = hideTip;
+    d.onmousemove = ev; d.onfocus = e2 => kbFocus(d) && ev(e2); d.onmouseleave = hideTip; d.onblur = hideTip;
     d.onclick = () => openDetail(r); d.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
     box.appendChild(d);
   });
@@ -405,7 +407,7 @@ function renderScatter(e) {
   svg.querySelectorAll(".pt").forEach(g => {
     const r = (g.dataset.g === "1" ? e.strong : e.picks)[+g.dataset.i];
     const ev = ev2 => { const b = g.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX || b.right, ev2.clientY || b.top); };
-    g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
+    g.onmousemove = ev; g.onfocus = e2 => kbFocus(g) && ev(e2); g.onmouseleave = hideTip; g.onblur = hideTip;
     g.onclick = () => openDetail(r); g.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
   });
 }
@@ -495,7 +497,7 @@ function renderBtChart() {
   svg.innerHTML = s;
   svg.querySelectorAll(".bt").forEach(g => {
     const r = items[+g.dataset.k], ev = e => { const b = g.getBoundingClientRect(); showTip(btTip(r), e.clientX || b.right, e.clientY || b.top); };
-    g.onmousemove = ev; g.onfocus = ev; g.onmouseleave = hideTip; g.onblur = hideTip;
+    g.onmousemove = ev; g.onfocus = e2 => kbFocus(g) && ev(e2); g.onmouseleave = hideTip; g.onblur = hideTip;
   });
 }
 /* ---- 個股明細：點股票才載入近 60 日資料（series.json） ---- */
