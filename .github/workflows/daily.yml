@@ -99,6 +99,8 @@ jobs:
           python -m playwright install --with-deps chromium > /dev/null
           sudo apt-get install -y -qq fonts-noto-cjk fonts-noto-color-emoji > /dev/null
           python screenshot.py
+          # 產業觀察圖（output/social/latest_產業觀察.png），給 Threads／IG 用；只講產業、不出現個股
+          python social_card.py || echo "產業觀察圖產生失敗（不影響其他結果）"
 
       - name: 顯示在 Actions 摘要
         if: always() && steps.chk.outputs.done != 'true'

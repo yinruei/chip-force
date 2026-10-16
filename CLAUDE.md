@@ -46,4 +46,5 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 ## 選股頁資料欄位
 每檔：`c` 代號、`n` 名稱、`m` 市場、`v` 成交張數、`net` 法人買賣超(張)、`r` 佔股本比、`f` 力度、`x` 買方轉強、`p` 收盤、`g` 漲跌%（和前一交易日收盤比，來自 `data/px_*.csv`，由 `fill_prices.py` 每天補抓）、顯著買超另有 `s` 連續上榜天數、`w` 近 10 日首次上榜、`b` 投信與三大法人雙榜（`build_dashboard.py` 的 `add_tags`）。
 個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 三大法人／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤，約 1MB，不進 git），`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
+產業觀察圖：`social_card.py` 每天在截圖步驟產生 `output/social/latest_產業觀察.png`（1080×1350，給 Threads／IG），只顯示各產業的顯著買超檔數、不出現個股；產業分類由 `industry.py` 從證交所 ISIN 一覽表（Big5，上市 strMode=2、上櫃 strMode=4）抓，快取 `data/industry.csv`，7 天更新一次。
 會員網站有 manifest 與主畫面圖示（`site/icons.js` 由 `site/icon.svg` 轉成 PNG 內嵌），手機加到主畫面會像 APP 全螢幕開啟。
