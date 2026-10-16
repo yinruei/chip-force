@@ -346,19 +346,66 @@ async function createResetToken(env, email, hours) {
   return t;
 }
 
-function forgotPage(env, note = "", err = "") {
+function forgotPage(env, note = "", err = "", pre = {}) {
   const body = selfResetOn(env)
     ? `<p>輸入註冊時用的 email，我們會寄一封重設密碼的信給你，連結 ${RESET_HOURS_SELF} 小時內有效。</p>
       <form method="post" action="/forgot"><label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required>
       <button class="full" type="submit">寄送重設連結</button></form>
       <p class="small" style="margin-top:16px">沒收到信？先看垃圾郵件匣；還是沒有，請在 Skool 私訊管理者。</p>`
-    : `<p>請在 Skool 私訊管理者，告訴他你註冊用的 email。管理者會給你一個重設密碼的連結，${RESET_HOURS_ADMIN} 小時內有效。</p>
-      <p>${skoolLink(env, "打開 Skool")}</p>`;
+    : `<p>輸入註冊時的 email、你的 Skool 帳號和本月驗證碼，就可以直接設定新密碼。</p>
+      <form method="post" action="/forgot">
+        <label for="email">Email</label><input id="email" name="email" type="email" autocomplete="email" required value="${esc(pre.email || "")}">
+        <label for="skool">Skool 帳號</label><input id="skool" name="skool" autocomplete="off" required placeholder="例如 @su-ray-2735" value="${esc(pre.handle ? "@" + pre.handle : "")}">
+        <p class="small" style="margin:4px 0 0">註冊時填的 Skool 個人檔案網址 skool.com/@ 後面那段。</p>
+        <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required>
+        <p class="small" style="margin:4px 0 0">在 Skool 付費課程裡：${skoolLink(env, "打開 Skool 課程看驗證碼")}</p>
+        <label for="password">新密碼（至少 8 碼，本站專用，不是 Skool 密碼）</label><input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required>
+        <label for="password2">再輸入一次新密碼</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
+        <button class="full" type="submit">重設密碼</button>
+      </form>
+      <p class="small" style="margin-top:16px">一直無法重設？請在 Skool 私訊管理者，管理者可以給你一個重設連結。</p>`;
   return page("忘記密碼", `<h1>忘記密碼</h1>${msg(err)}${msg(note, "ok")}${body}<p class="small" style="margin-top:16px"><a href="/login">回登入頁</a></p>`);
 }
 
+// 改密碼：所有裝置都要重新登入
+async function setNewPassword(env, u, pw) {
+  const { salt, hash, iter } = await hashPassword(pw);
+  u.salt = salt; u.hash = hash; u.iter = iter;
+  for (const sid of u.sessions || []) await env.SITE_KV.delete(`sess:${sid}`);
+  await setSessions(env, u.email, []);
+  await putAccount(env, u);
+}
+
+// 沒有寄信功能時的自助重設：email＋綁定的 Skool 帳號＋本月驗證碼。
+// 驗證碼是付費會員都看得到的，所以加上：次數限制、每個帳號一天一次、通知管理者、重設後所有裝置登出。
+const RESET_DAY_SECONDS = 86400;
+async function handleCodeReset(req, env, ip) {
+  const f = await req.formData();
+  const email = normEmail(f.get("email")), handle = normHandle(f.get("skool")), code = normCode(f.get("code"));
+  const pw = String(f.get("password") || ""), pw2 = String(f.get("password2") || "");
+  const again = (err) => forgotPage(env, "", err, { email, handle });
+  if ((await tooMany(env, `forgot:${ip}`, 10)) || (await tooMany(env, `forgot:${email}`, 5))) return again("嘗試次數太多，請 15 分鐘後再試。");
+  if (pw.length < 8) return again("新密碼至少 8 碼。");
+  if (pw !== pw2) return again("兩次輸入的新密碼不一樣。");
+  const u = validEmail(email) ? await getUser(env, email) : null;
+  const ok = u && u.status !== "disabled" && u.skool && safeEqual(handle, u.skool) && safeEqual(code, await monthCode(env, taipeiMonth()));
+  if (!ok) {
+    await addFail(env, `forgot:${ip}`); await addFail(env, `forgot:${email}`);
+    return again("Email、Skool 帳號或本月驗證碼不正確。請確認是註冊時填的 email 和 Skool 帳號，以及「本月」的驗證碼。");
+  }
+  if (await env.SITE_KV.get(`rstday:${email}`)) return again("這個帳號今天已經重設過密碼了。如需再次重設，請在 Skool 私訊管理者。");
+  await setNewPassword(env, u, pw);
+  await env.SITE_KV.put(`rstday:${email}`, "1", { expirationTtl: RESET_DAY_SECONDS });
+  if (env.ADMIN_EMAIL) {
+    const when = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 16).replace("T", " ");
+    await sendMail(env, env.ADMIN_EMAIL, `會員自助重設密碼：${email}`,
+      `${email}（Skool：@${u.skool}）在 ${when}（台北時間）用本月驗證碼重設了密碼，所有裝置已登出。\n\n如果對方說不是本人操作，請到管理頁幫他產生重設連結，必要時停用帳號。\n`);
+  }
+  return redirect("/login?m=reset");
+}
+
 async function handleForgot(req, env, ip, origin) {
-  if (!selfResetOn(env)) return forgotPage(env);
+  if (!selfResetOn(env)) return handleCodeReset(req, env, ip);
   if (await tooMany(env, `forgot:${ip}`, 5)) return forgotPage(env, "", "嘗試次數太多，請 15 分鐘後再試。");
   await addFail(env, `forgot:${ip}`); // 每次送出都計數，避免被拿來亂寄信
   const email = normEmail((await req.formData()).get("email"));
@@ -396,11 +443,7 @@ async function handleReset(req, env, url) {
   if (pw !== pw2) return resetPage(t, "兩次輸入的密碼不一樣。");
   const u = await getUser(env, email);
   if (!u) return resetExpired();
-  const { salt, hash, iter } = await hashPassword(pw);
-  u.salt = salt; u.hash = hash; u.iter = iter;
-  for (const sid of u.sessions || []) await env.SITE_KV.delete(`sess:${sid}`); // 改密碼後所有裝置都要重新登入
-  await setSessions(env, email, []);
-  await putAccount(env, u);
+  await setNewPassword(env, u, pw);
   await env.SITE_KV.delete(`rst:${t}`);
   return redirect("/login?m=reset");
 }
@@ -505,7 +548,7 @@ function guidePage(env) {
     <li><b>每月驗證</b>：每個月第一次進站要輸入新的驗證碼，碼在 Skool 付費課程裡，每月 1 號更新。</li>
     <li><b>裝置數</b>：一個帳號最多同時 2 台裝置登入，第 3 台登入時最舊的那台會被登出。</li>
     <li><b>本站密碼和 Skool 密碼是分開的</b>：在 Skool 改密碼不會影響這裡，登入時請輸入你在本站註冊時設的密碼。</li>
-    <li><b>忘記密碼</b>：到<a href="/forgot">忘記密碼</a>頁照指示重設。</li>
+    <li><b>忘記密碼</b>：到<a href="/forgot">忘記密碼</a>頁，輸入註冊時的 email、Skool 帳號和本月驗證碼，就能直接設定新密碼（每個帳號一天一次）。重設後所有裝置都要重新登入。</li>
     <li><b>加到手機主畫面</b>：iPhone 用 Safari 打開網站 → 分享 → 加入主畫面；Android 用 Chrome 打開 → 右上角 ⋮ → 加到主畫面（或「安裝應用程式」）。之後點主畫面的圖示，就會像 APP 一樣全螢幕打開。</li>
     <li>帳號請勿共用或轉借；退出付費方案後，下個月起就無法登入。</li>
   </ul>
