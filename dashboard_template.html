@@ -146,6 +146,13 @@ body.noscroll { overflow: hidden; }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
 .empty { padding: 24px; text-align: center; color: var(--ink-3); }
+/* 本週統整：每天一格 */
+.wdays { display: inline-flex; gap: 3px; vertical-align: middle; }
+.wd { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; border: 1px solid var(--line); color: var(--ink-3); }
+.wd.on { background: var(--s1); border-color: var(--s1); color: #fff; font-weight: 500; }
+.wd.st { background: var(--s2-soft); border-color: var(--s2); color: var(--s2); font-weight: 500; }
+.wd.no { border-style: dashed; opacity: .45; }
+.cnt { font-weight: 500; }
 
 .method { font-size: 12.5px; color: var(--ink-2); display: grid; gap: 6px; max-width: 78ch; }
 .method b { color: var(--ink); font-weight: 500; }
@@ -182,7 +189,8 @@ footer { font-size: 12px; color: var(--ink-3); }
       <p id="subtitle"></p>
     </div>
     <div class="controls">
-      <div id="viewWrap" hidden><span class="ctl-label">看什麼</span><div class="seg" id="viewSeg" role="group" aria-label="頁面"></div></div>
+      <div id="viewWrap"><span class="ctl-label">看什麼</span><div class="seg" id="viewSeg" role="group" aria-label="頁面"></div></div>
+      <div id="weekWrap" hidden><span class="ctl-label">哪一週</span><div class="seg" id="weekSeg" role="group" aria-label="週"></div></div>
       <div id="dateWrap"><span class="ctl-label">交易日</span><div class="seg" id="dateSeg" role="group" aria-label="交易日"></div></div>
       <div><span class="ctl-label">看哪個法人</span><div class="seg" id="invSeg" role="group" aria-label="法人"></div></div>
       <div><span class="ctl-label">顯示</span><div class="seg"><button type="button" id="themeBtn"></button></div></div>
@@ -223,6 +231,29 @@ footer { font-size: 12px; color: var(--ink-3); }
       <table>
         <thead><tr id="thead"></tr></thead>
         <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+  </div>
+
+  <div id="viewWeek" class="view" hidden>
+  <div class="cond" id="wkCond"></div>
+  <section class="kpis" aria-label="本週摘要">
+    <div class="kpi hero"><div class="k">本週最常上榜</div><div class="v" id="wTop">—</div><div class="sub" id="wTopSub"></div></div>
+    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s1)"></span>本週上榜</div><div class="v" id="wAll">0</div><div class="sub" id="wAllSub"></div></div>
+    <div class="kpi"><div class="k">重複上榜（2 天以上）</div><div class="v" id="wRep">0</div><div class="sub" id="wRepSub"></div></div>
+    <div class="kpi"><div class="k">⭐ 雙榜</div><div class="v" id="wBoth">0</div><div class="sub" id="wBothSub"></div></div>
+  </section>
+  <section class="panel">
+    <div class="tabs">
+      <div class="seg" id="wkListSeg" role="group" aria-label="清單"></div>
+      <input type="search" id="wq" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
+    </div>
+    <p class="tbl-hint">同一檔這週只列一次。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr id="wHead"></tr></thead>
+        <tbody id="wBody"></tbody>
       </table>
     </div>
   </section>
@@ -273,7 +304,7 @@ const COLS = [
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
-const state = { shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", h: 20 };
+const state = { wshown: 6, week: null, wlist: "picks", wsort: ["d", -1], wq: "", shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", h: 20 };
 const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");
@@ -317,13 +348,15 @@ function renderDates() {
 }
 
 function render() {
-  $("viewWrap").hidden = !BT;
-  if (BT) seg($("viewSeg"), [["pick", "今日選股"], ["bt", "回測"]], "view", render);
+  seg($("viewSeg"), [["pick", "每日選股"], ["week", "本週統整"]].concat(BT ? [["bt", "回測"]] : []), "view", render);
   $("viewPick").hidden = state.view !== "pick";
+  $("viewWeek").hidden = state.view !== "week";
   $("viewBt").hidden = state.view !== "bt";
   $("dateWrap").hidden = state.view !== "pick";
+  $("weekWrap").hidden = state.view !== "week";
   renderDates();
   seg($("invSeg"), INV, "inv", render);
+  if (state.view === "week") { renderWeek(); return; }
   if (state.view === "bt") { $("subtitle").textContent = "把每天的訊號買進、持有幾天後賣出，和同一天全市場的平均比較。這是歷史統計，不代表未來。"; renderBt(); return; }
   const e = cur();
   $("subtitle").textContent = `${dlong(state.date)} 收盤後，全市場上市櫃普通股。找出法人買超力道明顯異常的股票。`;
@@ -345,6 +378,123 @@ function render() {
 
   renderBars(e); renderScatter(e); renderTable(e);
 }
+
+/* ---- 本週統整：把一週每天的清單合併，同一檔只列一次 ---- */
+const ymd = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
+const toDate = ds => new Date(+ds.slice(0, 4), +ds.slice(4, 6) - 1, +ds.slice(6));
+const WEEKS = (() => {   // 新到舊；每週 ds 由舊到新、wd 是週一～週五
+  const m = new Map();
+  dates.slice().reverse().forEach(ds => {
+    const d = toDate(ds); d.setDate(d.getDate() - (d.getDay() + 6) % 7);
+    const k = ymd(d);
+    if (!m.has(k)) m.set(k, { k, ds: [], wd: [0, 1, 2, 3, 4].map(i => { const x = new Date(d); x.setDate(d.getDate() + i); return ymd(x); }) });
+    m.get(k).ds.push(ds);
+  });
+  return [...m.values()].reverse();
+})();
+const wkOf = () => WEEKS.find(w => w.k === state.week) || WEEKS[0];
+const mdS = ds => `${+ds.slice(4, 6)}/${+ds.slice(6)}`;
+// 手機上先看得到「本週每天」，所以排在名稱後面；市場放最後
+const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "本週漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
+
+function weekAgg(w, inv) {
+  const agg = new Map();
+  w.ds.forEach(ds => {
+    const e = DATA.dates[ds][inv];
+    [["picks", 1], ["strong", 2]].forEach(([lst, v]) => e[lst].forEach(r => {
+      let a = agg.get(r.c);
+      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, wn: null, wg: null });
+      a.st[ds] = a.st[ds] || v;
+      if (v === 1) { a.dp++; a.fp = Math.max(a.fp, r.f); if (r.b) a.b = true; } else { a.ds++; a.fs = Math.max(a.fs, r.f); }
+      if (ds >= a.last) { a.last = ds; a.p = r.p; }
+    }));
+  });
+  // 有明細資料（series.json）時，補上整週的法人買賣超合計、本週漲跌與週末收盤
+  if (SER) {
+    const D = SER.d, i0 = D.indexOf(w.ds[0]), i1 = D.indexOf(w.ds[w.ds.length - 1]), kn = SKEY[inv][0];
+    agg.forEach(a => {
+      const x = SER.s[a.c];
+      if (!x || i1 < 0) return;
+      let sum = 0; for (let i = Math.max(0, i0); i <= i1; i++) sum += x[kn][i] || 0;
+      a.wn = i0 >= 0 ? sum : null;
+      const pe = x.p[i1], pb = i0 > 0 ? x.p[i0 - 1] : null;
+      if (pe) a.p = pe;
+      a.wg = pe && pb ? (pe / pb - 1) * 100 : null;
+    });
+  }
+  return [...agg.values()];
+}
+
+function renderWeekSeg() {
+  const box = $("weekSeg"); box.innerHTML = "";
+  if (!WEEKS.some(w => w.k === state.week)) state.week = WEEKS[0].k;
+  state.wshown = Math.max(state.wshown, WEEKS.findIndex(w => w.k === state.week) + 1);
+  WEEKS.slice(0, state.wshown).forEach(w => {
+    const b = document.createElement("button");
+    b.type = "button"; b.textContent = `${mdS(w.ds[0])}–${mdS(w.ds[w.ds.length - 1])}` + (w.ds.length < 5 ? `（${w.ds.length} 天）` : "");
+    b.setAttribute("aria-pressed", String(state.week === w.k));
+    b.onclick = () => { state.week = w.k; render(); };
+    box.appendChild(b);
+  });
+  const left = WEEKS.length - state.wshown;
+  if (left > 0) { const b = document.createElement("button"); b.type = "button"; b.className = "more"; b.textContent = `更早 ▾（還有 ${left} 週）`; b.onclick = () => { state.wshown += 6; renderWeekSeg(); }; box.appendChild(b); }
+}
+
+function renderWeek() {
+  renderWeekSeg();
+  const w = wkOf();
+  $("subtitle").textContent = `${dlong(w.ds[0])} ～ ${dlong(w.ds[w.ds.length - 1])} 這一週，把每天的清單合併成一張表，看哪些股票重複出現。`;
+  $("wkCond").innerHTML = [`${INV.find(i => i[0] === state.inv)[1]}`, `${MODE[state.inv]}模式`, `本週 ${w.ds.length} 個交易日`].map(t => `<span>${t}</span>`).join("");
+  const all = weekAgg(w, state.inv);
+  const picks = all.filter(a => a.dp), strong = all.filter(a => a.ds);
+  const top = picks.slice().sort((a, b) => b.dp - a.dp || b.fp - a.fp)[0];
+  $("wTop").textContent = top ? `${top.dp} / ${w.ds.length} 天` : "—";
+  $("wTopSub").textContent = top ? `${top.c} ${top.n}，這週最強力度 ${top.fp.toFixed(2)}` : "這週沒有顯著買超的股票";
+  const otc = picks.filter(a => a.m === "上櫃").length;
+  $("wAll").textContent = picks.length;
+  $("wAllSub").textContent = `上市 ${picks.length - otc}・上櫃 ${otc}（每天加起來共 ${picks.reduce((s, a) => s + a.dp, 0)} 檔次）`;
+  const rep = picks.filter(a => a.dp >= 2), full = picks.filter(a => a.dp === w.ds.length && w.ds.length > 1);
+  $("wRep").textContent = rep.length;
+  $("wRepSub").textContent = full.length ? `每天都上榜 ${full.length} 檔` : "沒有每天都上榜的股票";
+  const both = picks.filter(a => a.b);
+  $("wBoth").textContent = both.length;
+  $("wBothSub").textContent = "這週至少有一天投信和三大法人同時上榜";
+  renderWeekTable(w, picks, strong);
+  if (!SER) loadSeries().then(() => { if (state.view === "week") renderWeek(); }).catch(() => {});
+}
+
+function renderWeekTable(w, picks, strong) {
+  seg($("wkListSeg"), [["picks", `顯著買超 ${picks.length}`], ["strong", `買方轉強 ${strong.length}`]], "wlist", renderWeek);
+  const isP = state.wlist === "picks";
+  const head = $("wHead"); head.innerHTML = "";
+  W_COLS.forEach(([k, label]) => {
+    const th = document.createElement("th");
+    if (k === "days") { th.textContent = label; head.appendChild(th); return; }
+    th.setAttribute("aria-sort", state.wsort[0] === k ? (state.wsort[1] > 0 ? "ascending" : "descending") : "none");
+    const b = document.createElement("button"); b.type = "button"; b.textContent = label;
+    b.onclick = () => { state.wsort = [k, state.wsort[0] === k ? -state.wsort[1] : (["c", "n", "m"].includes(k) ? 1 : -1)]; renderWeek(); };
+    th.appendChild(b); head.appendChild(th);
+  });
+  const val = (a, k) => k === "d" ? (isP ? a.dp : a.ds) : k === "f" ? (isP ? a.fp : a.fs) : a[k];
+  const q = state.wq.trim().toLowerCase();
+  let rows = (isP ? picks : strong).filter(a => !q || a.c.includes(q) || a.n.toLowerCase().includes(q));
+  const [k, dir] = state.wsort;
+  rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(val(a, k)) - numOr(val(b, k)))) * dir
+    || val(b, "d") - val(a, "d") || val(b, "f") - val(a, "f"));
+  const have = new Set(w.ds), fmax = Math.max(...rows.map(a => val(a, "f")), 1);
+  const cells = a => `<span class="wdays">${w.wd.map((ds, i) => {
+    const v = a.st[ds], label = "一二三四五"[i];
+    const cls = !have.has(ds) ? "no" : v === 1 ? "on" : v === 2 ? "st" : "";
+    const t = !have.has(ds) ? "休市或還沒到" : v === 1 ? "顯著買超" : v === 2 ? "買方轉強" : "沒上榜";
+    return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
+  }).join("")}</span>`;
+  const later = SER ? "—" : "…";
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${a.wg === null ? later : pct(a.wg)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
+    : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
+  $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
+  $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
+}
+$("wq").oninput = ev => { state.wq = ev.target.value; renderWeek(); };
 
 /* ---- tooltip ---- */
 const tip = $("tip");
@@ -512,8 +662,8 @@ const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][i
 const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
 const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
 
-function openDetail(r) {
-  Object.assign(det, { code: r.c, name: r.n, m: r.m, inv: state.inv, last: document.activeElement });
+function openDetail(r, ds) {
+  Object.assign(det, { code: r.c, name: r.n, m: r.m, inv: state.inv, date: ds || state.date, last: document.activeElement });
   hideTip();
   $("dlg").hidden = false; document.body.classList.add("noscroll");
   $("dlgClose").focus();
@@ -528,10 +678,10 @@ $("dlg").onclick = ev => { if (ev.target === $("dlg")) closeDetail(); };
 addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("dlg").hidden) closeDetail(); });
 
 function renderDetail() {
-  const e = DATA.dates[state.date] && DATA.dates[state.date][det.inv];
+  const e = DATA.dates[det.date] && DATA.dates[det.date][det.inv];
   const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
   $("dlgTitle").textContent = `${det.code} ${det.name}`;
-  $("dlgSub").innerHTML = `${det.m}・${dlong(state.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
+  $("dlgSub").innerHTML = `${det.m}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
   const box = $("dlgInv"); box.innerHTML = "";
   INV.forEach(([val, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(det.inv === val));
@@ -548,7 +698,7 @@ function renderDetail() {
   const D = SER.d, N = D.length;
   const [kn, kf] = SKEY[det.inv];
   const net = x[kn], force = x[kf], close = x.p;
-  const sel = D.indexOf(state.date) >= 0 ? D.indexOf(state.date) : N - 1;
+  const sel = D.indexOf(det.date) >= 0 ? D.indexOf(det.date) : N - 1;
   const st = D.map(ds => listed(ds, det.inv, det.code));
   const upto = st.slice(0, sel + 1);
   let streak = 0; for (let i = sel; i >= 0 && st[i] === 1; i--) streak++;
