@@ -153,6 +153,7 @@ input[type="search"] { font: inherit; font-size: 13px; background: var(--surface
 .wd.st { background: var(--s2-soft); border-color: var(--s2); color: var(--s2); font-weight: 500; }
 .wd.no { border-style: dashed; opacity: .45; }
 .cnt { font-weight: 500; }
+.from { display: block; font-size: 11px; color: var(--ink-3); }
 
 .method { font-size: 12.5px; color: var(--ink-2); display: grid; gap: 6px; max-width: 78ch; }
 .method b { color: var(--ink); font-weight: 500; }
@@ -249,7 +250,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div class="seg" id="wkListSeg" role="group" aria-label="清單"></div>
       <input type="search" id="wq" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
-    <p class="tbl-hint">同一檔這週只列一次。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
+    <p class="tbl-hint">同一檔這週只列一次。上榜後漲跌＝從這週第一次上榜那天的收盤算到週末收盤。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
     <div class="tbl-scroll">
       <table>
         <thead><tr id="wHead"></tr></thead>
@@ -395,7 +396,7 @@ const WEEKS = (() => {   // 新到舊；每週 ds 由舊到新、wd 是週一～
 const wkOf = () => WEEKS.find(w => w.k === state.week) || WEEKS[0];
 const mdS = ds => `${+ds.slice(4, 6)}/${+ds.slice(6)}`;
 // 手機上先看得到「本週每天」，所以排在名稱後面；市場放最後
-const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "本週漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
+const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "上榜後漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
 
 function weekAgg(w, inv) {
   const agg = new Map();
@@ -403,13 +404,14 @@ function weekAgg(w, inv) {
     const e = DATA.dates[ds][inv];
     [["picks", 1], ["strong", 2]].forEach(([lst, v]) => e[lst].forEach(r => {
       let a = agg.get(r.c);
-      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, wn: null, wg: null });
+      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, pe: null, wn: null, first: {} });
       a.st[ds] = a.st[ds] || v;
+      if (!a.first[v]) a.first[v] = { ds, p: r.p };   // 這週第一次上榜（重複上榜以第一天為準）
       if (v === 1) { a.dp++; a.fp = Math.max(a.fp, r.f); if (r.b) a.b = true; } else { a.ds++; a.fs = Math.max(a.fs, r.f); }
       if (ds >= a.last) { a.last = ds; a.p = r.p; }
     }));
   });
-  // 有明細資料（series.json）時，補上整週的法人買賣超合計、本週漲跌與週末收盤
+  // 有明細資料（series.json）時，補上整週的法人買賣超合計與週末收盤
   if (SER) {
     const D = SER.d, i0 = D.indexOf(w.ds[0]), i1 = D.indexOf(w.ds[w.ds.length - 1]), kn = SKEY[inv][0];
     agg.forEach(a => {
@@ -417,9 +419,7 @@ function weekAgg(w, inv) {
       if (!x || i1 < 0) return;
       let sum = 0; for (let i = Math.max(0, i0); i <= i1; i++) sum += x[kn][i] || 0;
       a.wn = i0 >= 0 ? sum : null;
-      const pe = x.p[i1], pb = i0 > 0 ? x.p[i0 - 1] : null;
-      if (pe) a.p = pe;
-      a.wg = pe && pb ? (pe / pb - 1) * 100 : null;
+      if (x.p[i1]) a.p = a.pe = x.p[i1];
     });
   }
   return [...agg.values()];
@@ -475,7 +475,15 @@ function renderWeekTable(w, picks, strong) {
     b.onclick = () => { state.wsort = [k, state.wsort[0] === k ? -state.wsort[1] : (["c", "n", "m"].includes(k) ? 1 : -1)]; renderWeek(); };
     th.appendChild(b); head.appendChild(th);
   });
-  const val = (a, k) => k === "d" ? (isP ? a.dp : a.ds) : k === "f" ? (isP ? a.fp : a.fs) : a[k];
+  const wEnd = w.ds[w.ds.length - 1];
+  // 上榜後漲跌：從這週第一次上榜那天的收盤，算到這週最後一個交易日的收盤
+  const gain = a => {
+    const f = a.first[isP ? 1 : 2], end = a.pe || (a.last === wEnd ? a.p : null);
+    if (!f || f.ds === wEnd || !f.p || !end) return null;
+    return (end / f.p - 1) * 100;
+  };
+  const gainCell = a => { const f = a.first[isP ? 1 : 2]; if (f && f.ds === wEnd) return '<span class="tag">剛上榜</span>'; const g = gain(a); return g === null ? (SER ? "—" : "…") : `${pct(g)}<span class="from">${mdS(f.ds)} 起</span>`; };
+  const val = (a, k) => k === "d" ? (isP ? a.dp : a.ds) : k === "f" ? (isP ? a.fp : a.fs) : k === "wg" ? gain(a) : a[k];
   const q = state.wq.trim().toLowerCase();
   let rows = (isP ? picks : strong).filter(a => !q || a.c.includes(q) || a.n.toLowerCase().includes(q));
   const [k, dir] = state.wsort;
@@ -489,7 +497,7 @@ function renderWeekTable(w, picks, strong) {
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
   const later = SER ? "—" : "…";
-  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${a.wg === null ? later : pct(a.wg)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
     : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
   $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
