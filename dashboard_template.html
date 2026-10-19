@@ -108,6 +108,12 @@ th[aria-sort="descending"] button::after { content: " ▼"; }
 td.num { font-size: 13px; }
 tbody tr:hover { background: var(--bg); }
 tbody tr:last-child td { border-bottom: 0; }
+/* 表格往左滑時，代號和名稱固定在左邊，才知道右邊的數字是哪一檔 */
+table.freeze th:nth-child(-n+2), table.freeze td:nth-child(-n+2) { position: sticky; z-index: 1; background: var(--surface); }
+table.freeze th:nth-child(-n+2) { background: var(--bg); z-index: 3; }
+table.freeze th:first-child, table.freeze td:first-child { left: 0; width: 64px; min-width: 64px; max-width: 64px; }
+table.freeze th:nth-child(2), table.freeze td:nth-child(2) { left: 64px; box-shadow: inset -1px 0 0 var(--line); }
+table.freeze tbody tr:hover td:nth-child(-n+2) { background: var(--bg); }
 .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--grid); color: var(--ink-2); }
 .cross { color: var(--s2); font-weight: 700; }
 .bdg { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap; vertical-align: 1px; font-weight: 500; }
@@ -176,6 +182,11 @@ footer { font-size: 12px; color: var(--ink-3); }
   .kpi.hero, .kpis .kpi:last-child { grid-column: 1 / -1; }
   .panels { grid-template-columns: 1fr; }
 }
+@media (max-width: 560px) {
+  /* 手機上名稱欄不要太寬，標記換到下一行 */
+  table.freeze td:nth-child(2) { white-space: normal; min-width: 6em; max-width: 8.5em; line-height: 1.5; }
+  table.freeze td:nth-child(2) .bdg { margin-left: 0; margin-right: 4px; }
+}
 @media (max-width: 420px) {
   .bar { grid-template-columns: 8.6em 1fr 3.2em; }
   .kpi .v { font-size: 26px; } .kpi.hero .v { font-size: 38px; }
@@ -229,7 +240,7 @@ footer { font-size: 12px; color: var(--ink-3); }
     </div>
     <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
-      <table>
+      <table class="freeze">
         <thead><tr id="thead"></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -252,7 +263,7 @@ footer { font-size: 12px; color: var(--ink-3); }
     </div>
     <p class="tbl-hint">同一檔這週只列一次。上榜後漲跌＝從這週第一次上榜那天的收盤算到週末收盤。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
     <div class="tbl-scroll">
-      <table>
+      <table class="freeze">
         <thead><tr id="wHead"></tr></thead>
         <tbody id="wBody"></tbody>
       </table>
