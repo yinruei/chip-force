@@ -62,12 +62,14 @@ button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2p
 .cond span { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; }
 .cond .num { color: var(--ink); }
 
-.kpis { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr; gap: 12px; }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; min-width: 0; }
-.kpi .k { font-size: 12px; color: var(--ink-3); letter-spacing: .06em; }
-.kpi .v { font-family: var(--font-num); font-size: 30px; font-weight: 500; line-height: 1.2; margin-top: 4px; }
-.kpi .sub { font-size: 12.5px; color: var(--ink-2); margin-top: 2px; overflow-wrap: anywhere; }
-.kpi.hero .v { font-size: 44px; }
+/* 摘要卡：精簡版，不要佔太多版面 */
+.kpis { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; gap: 8px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; min-width: 0; }
+.kpi .k { font-size: 11.5px; color: var(--ink-3); letter-spacing: .04em; }
+.kpi .v { font-family: var(--font-num); font-size: 22px; font-weight: 500; line-height: 1.25; margin-top: 1px; }
+.kpi .sub { font-size: 11.5px; line-height: 1.45; color: var(--ink-2); margin-top: 1px; overflow-wrap: anywhere; }
+.kpi.hero .v { font-size: 26px; }
+@media (max-width: 560px) { .kpi .xs-hide { display: none; } }   /* 手機上只留最重要的一行 */
 .kpi .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
 
 .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -77,7 +79,7 @@ button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2p
 
 /* 排行長條 */
 .bars { display: flex; flex-direction: column; gap: 6px; }
-.bar { display: grid; grid-template-columns: 10.5em 1fr 3.4em; align-items: center; gap: 8px; min-width: 0; cursor: default; }
+.bar { display: grid; grid-template-columns: 12em 1fr 3.4em; align-items: center; gap: 8px; min-width: 0; cursor: default; }
 .bar .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bar .nm i { font-style: normal; font-family: var(--font-num); font-size: 11.5px; color: var(--ink-3); margin-right: 5px; }
 .bar .tr { height: 14px; background: var(--grid); border-radius: 0 4px 4px 0; position: relative; }
@@ -226,7 +228,6 @@ footer { font-size: 12px; color: var(--ink-3); }
 .neg { color: var(--ink-2); }
 @media (max-width: 860px) {
   .kpis { grid-template-columns: 1fr 1fr; }
-  .kpi.hero, .kpis .kpi:last-child { grid-column: 1 / -1; }
   .panels { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
@@ -235,8 +236,8 @@ footer { font-size: 12px; color: var(--ink-3); }
   table.freeze td:nth-child(2) .bdg { margin-left: 0; margin-right: 4px; }
 }
 @media (max-width: 420px) {
-  .bar { grid-template-columns: 8.6em 1fr 3.2em; }
-  .kpi .v { font-size: 26px; } .kpi.hero .v { font-size: 38px; }
+  .bar { grid-template-columns: 10.2em 1fr 3.2em; }
+  .kpi .v { font-size: 19px; } .kpi.hero .v { font-size: 21px; } .kpi { padding: 7px 10px; }
 }
 @media (prefers-reduced-motion: reduce) { #tip { transition: none; } }
 </style>
@@ -262,8 +263,8 @@ footer { font-size: 12px; color: var(--ink-3); }
   <section class="kpis" aria-label="摘要">
     <div class="kpi hero"><div class="k">力度最強</div><div class="v" id="kTop">—</div><div class="sub" id="kTopSub"></div></div>
     <div class="kpi"><div class="k"><span class="dot" style="background:var(--s1)"></span>顯著買超</div><div class="v" id="kPicks">0</div><div class="sub" id="kPicksSub"></div></div>
-    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s2)"></span>買方轉強</div><div class="v" id="kStrong">0</div><div class="sub" id="kStrongSub"></div></div>
-    <div class="kpi"><div class="k">成交量門檻濾掉</div><div class="v" id="kCut">0</div><div class="sub" id="kCutSub"></div></div>
+    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s2)"></span>買方轉強</div><div class="v" id="kStrong">0</div><div class="sub xs-hide" id="kStrongSub"></div></div>
+    <div class="kpi"><div class="k">成交量門檻濾掉</div><div class="v" id="kCut">0</div><div class="sub xs-hide" id="kCutSub"></div></div>
   </section>
 
   <section class="panel" id="watchPanel" hidden>
@@ -311,10 +312,10 @@ footer { font-size: 12px; color: var(--ink-3); }
   <div id="viewLock" class="view" hidden>
   <div class="cond" id="lkCond"></div>
   <section class="kpis" aria-label="摘要">
-    <div class="kpi hero"><div class="k">力度最強</div><div class="v">🔒</div><div class="sub">加入雷達席才看得到是哪一檔</div></div>
+    <div class="kpi hero"><div class="k">力度最強</div><div class="v">🔒</div><div class="sub">會員才看得到是哪一檔</div></div>
     <div class="kpi"><div class="k"><span class="dot" style="background:var(--s1)"></span>顯著買超</div><div class="v" id="lkN">0</div><div class="sub" id="lkNSub"></div></div>
-    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s2)"></span>買方轉強</div><div class="v" id="lkS">0</div><div class="sub">短期買盤轉強，尚未達顯著門檻</div></div>
-    <div class="kpi"><div class="k">最集中的產業</div><div class="v" id="lkTop" style="font-size:22px">—</div><div class="sub" id="lkTopSub"></div></div>
+    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s2)"></span>買方轉強</div><div class="v" id="lkS">0</div><div class="sub xs-hide">短期買盤轉強，尚未達顯著門檻</div></div>
+    <div class="kpi"><div class="k">最集中的產業</div><div class="v" id="lkTop">—</div><div class="sub" id="lkTopSub"></div></div>
   </section>
   <section class="panels">
     <div class="panel">
@@ -432,7 +433,7 @@ function renderLocked() {
   $("subtitle").textContent = `${dlong(state.date)} 收盤後的最新資料，付費會員才看得到完整名單。`;
   $("lkCond").innerHTML = [`${INV.find(i => i[0] === state.inv)[1]}`, "🔒 最新資料只開放付費會員", "沒有 🔒 的日期可以看完整內容"].map(t => `<span>${t}</span>`).join("");
   $("lkN").textContent = e.n;
-  $("lkNSub").innerHTML = `上市 ${e.n - e.otc}・上櫃 ${e.otc}<br>連續上榜 ${e.hot}・新上榜 ${e.new}・雙榜 ${e.both}`;
+  $("lkNSub").innerHTML = `<span class="xs-hide">上市 ${e.n - e.otc}・上櫃 ${e.otc}<br></span>連續 ${e.hot}・新上榜 ${e.new}・雙榜 ${e.both}`;
   $("lkS").textContent = e.ns;
   $("lkTop").textContent = e.ind.length ? e.ind[0][0] : "—";
   $("lkTopSub").textContent = e.ind.length ? `${e.ind[0][1]} 檔顯著買超` : "今天沒有顯著買超";
@@ -493,15 +494,15 @@ function render() {
 
   const top = e.picks[0];
   $("kTop").textContent = top ? top.f.toFixed(2) : "—";
-  $("kTopSub").textContent = top ? `${top.c} ${top.n}，佔股本比 ${top.r}%，成交 ${fmt(top.v)} 張` : "今天沒有達標的股票";
+  $("kTopSub").innerHTML = top ? `${top.c} ${top.n}<span class="xs-hide">，佔股本比 ${top.r}%，成交 ${fmt(top.v)} 張</span>` : "今天沒有達標的股票";
   $("kPicks").textContent = e.picks.length;
   const otc = e.picks.filter(r => r.m === "上櫃").length;
   const nHot = e.picks.filter(r => r.s >= 2).length, nNew = e.picks.filter(r => r.w).length, nBoth = e.picks.filter(r => r.b).length;
-  $("kPicksSub").innerHTML = `上市 ${e.picks.length - otc}・上櫃 ${otc}<br>連續上榜 ${nHot}・新上榜 ${nNew}・雙榜 ${nBoth}`;
+  $("kPicksSub").innerHTML = `<span class="xs-hide">上市 ${e.picks.length - otc}・上櫃 ${otc}<br></span>連續 ${nHot}・新上榜 ${nNew}・雙榜 ${nBoth}`;
   $("kStrong").textContent = e.strong.length;
   $("kStrongSub").textContent = "短期買盤轉強，尚未達顯著門檻";
   $("kCut").textContent = e.before.picks - e.picks.length;
-  $("kCutSub").textContent = `顯著買超 ${e.before.picks} → ${e.picks.length} 檔，買方轉強 ${e.before.strong} → ${e.strong.length} 檔`;
+  $("kCutSub").textContent = `顯著 ${e.before.picks} → ${e.picks.length} 檔、轉強 ${e.before.strong} → ${e.strong.length} 檔`;
 
   renderBars(e); renderScatter(e); renderTable(e);
 }
@@ -651,7 +652,7 @@ function renderBars(e) {
   const max = Math.max(...rows.map(r => r.f));
   rows.forEach(r => {
     const d = document.createElement("div"); d.className = "bar"; d.tabIndex = 0;
-    d.innerHTML = `<div class="nm"><i>${r.c}</i>${r.n}${badges(r, true)}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
+    d.innerHTML = `<div class="nm">${mk(r.m)}<i>${r.c}</i>${r.n}${badges(r, true)}</div><div class="tr"><div class="fl" style="width:${(r.f / max * 100).toFixed(1)}%"></div></div><div class="vl">${r.f.toFixed(1)}</div>`;
     const ev = ev2 => { const b = d.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX ?? b.left + 40, ev2.clientY ?? b.bottom); };
     d.onmousemove = ev; d.onfocus = e2 => kbFocus(d) && ev(e2); d.onmouseleave = hideTip; d.onblur = hideTip;
     d.onclick = () => openDetail(r); d.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
