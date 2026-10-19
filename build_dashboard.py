@@ -26,13 +26,25 @@ DEMO_DAYS = 10   # 顯示幾個交易日（兩週，「本週統整」才看得�
 DEMO_LOCKED = 5  # 最近幾個交易日「上鎖」：只給檔數與產業分布，股票名單在頁面上模糊處理（真的名單不放進展示版）
 
 
+_IND: dict[str, str] | None = None
+
+
+def industry_of(code: str) -> str:
+    """產業分類（證交所 ISIN 一覽表的產業別，快取在 data/industry.csv；只讀快取、不連網）。"""
+    global _IND
+    if _IND is None:
+        import industry
+        _IND = industry.load()
+    return _IND.get(code, "")
+
+
 def row(r: dict, close: dict, prev: dict) -> dict:
     code = r["代號"]
     p, p0 = close.get(code), prev.get(code)
     return {"c": code, "n": r["名稱"], "m": r["市場"], "v": r["成交張數"], "net": r["法人買賣超(張)"],
             "r": r["佔股本比(%)"], "f": r["力度z"], "x": bool(r["買方轉強"]),
             # 收盤價與漲跌幅（和前一個交易日收盤比；除權息日會和官方漲跌不同）
-            "p": p, "g": round((p / p0 - 1) * 100, 2) if p and p0 else None}
+            "p": p, "g": round((p / p0 - 1) * 100, 2) if p and p0 else None, "ind": industry_of(code)}
 
 
 def load_close(ds: str) -> dict[str, float]:
@@ -166,12 +178,12 @@ def main() -> None:
     build_demo(out, ser, html_tpl=(HERE / "dashboard_template.html").read_text(encoding="utf-8"))
 
 
-def locked_summary(e: dict, ind: dict[str, str]) -> dict:
+def locked_summary(e: dict) -> dict:
     """上鎖的日子只留統計數字：檔數、連續上榜／新上榜／雙榜幾檔、前 5 大產業。不含任何代號、名稱、價格。"""
     picks = e["picks"]
     cnt: dict[str, int] = {}
     for r in picks:
-        k = ind.get(r["c"], "其他")
+        k = r.get("ind") or industry_of(r["c"]) or "其他"
         cnt[k] = cnt.get(k, 0) + 1
     return {"n": len(picks), "ns": len(e["strong"]), "hot": sum(1 for r in picks if r.get("s", 0) >= 2),
             "new": sum(1 for r in picks if r.get("w")), "both": sum(1 for r in picks if r.get("b")),
@@ -192,11 +204,9 @@ def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
         return
     end = keep[-1]
     demo = {"params": out["params"], "dates": {d: out["dates"][d] for d in keep}, "demo": {"until": end, "join": "__JOIN_URL__"}}
-    import industry   # 只在產生展示版時才需要
-    ind = industry.load()
     for d in ds_all[-DEMO_LOCKED:]:
         if d > end:
-            demo["dates"][d] = {"locked": True, **{inv: locked_summary(out["dates"][d][inv], ind) for inv in MODES}}
+            demo["dates"][d] = {"locked": True, **{inv: locked_summary(out["dates"][d][inv]) for inv in MODES}}
     codes = {r["c"] for d in keep for e in [out["dates"][d]] for inv in MODES for lst in ("picks", "strong") for r in e[inv][lst]}
     n = ser["d"].index(end) + 1 if end in ser["d"] else 0
     dser = {"d": ser["d"][:n], "s": {k: {f: v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}

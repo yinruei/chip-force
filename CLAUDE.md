@@ -44,7 +44,8 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 會員看得到的地方（`dashboard_template.html`、頁面裡的 `DATA`、`site/worker.js` 的使用說明 `/guide`、Skool 截圖）都不要寫出公式或參數（60 日、z、標準差、門檻 2、0.05%、1000 張、20/60 日均線）。頁面資料只放門檻值 `params.k` 畫虛線，力度欄位叫 `f`、畫面上叫「力度」。
 
 ## 選股頁資料欄位
-每檔：`c` 代號、`n` 名稱、`m` 市場、`v` 成交張數、`net` 法人買賣超(張)、`r` 佔股本比、`f` 力度、`x` 買方轉強、`p` 收盤、`g` 漲跌%（和前一交易日收盤比，來自 `data/px_*.csv`，由 `fill_prices.py` 每天補抓）、顯著買超另有 `s` 連續上榜天數、`w` 近 10 日首次上榜、`b` 投信與三大法人雙榜（`build_dashboard.py` 的 `add_tags`）。
+每檔：`c` 代號、`n` 名稱、`m` 市場、`v` 成交張數、`net` 法人買賣超(張)、`r` 佔股本比、`f` 力度、`x` 買方轉強、`p` 收盤、`g` 漲跌%（和前一交易日收盤比，來自 `data/px_*.csv`，由 `fill_prices.py` 每天補抓）、`ind` 產業（`data/industry.csv`，`build_dashboard.py` 的 `industry_of` 只讀快取；快取由 `social_card.py` 每 7 天更新）、顯著買超另有 `s` 連續上榜天數、`w` 近 10 日首次上榜、`b` 投信與三大法人雙榜（`build_dashboard.py` 的 `add_tags`）。
+產業分布：每日選股頁的「產業分布」依目前清單統計 `ind`，點長條或清單的產業標籤設定 `state.ind` 篩選完整清單（換日自動清除）；本週統整與明細也顯示產業。
 本週統整：頁面「看什麼」的「本週統整」分頁完全在前端由 `DATA` 依週（週一～週五）合併，同一檔只列一次、顯示每天上榜狀態與上榜天數；「上榜後漲跌」從該週第一次上榜那天的收盤（DATA 的 `p`）算到週末收盤；整週法人買賣超、週末收盤取自 `series.json`（載入前顯示「…」）。點股票開明細時，明細的日期用該週最後一個交易日（`openDetail(r, ds)`）。研究結果見 `docs/repeat_study.md`：一週上榜次數多，之後並沒有比較強。
 
 個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 三大法人／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤，約 1MB，不進 git），`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。

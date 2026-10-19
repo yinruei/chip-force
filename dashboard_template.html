@@ -169,6 +169,22 @@ body.noscroll { overflow: hidden; }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
 .empty { padding: 24px; text-align: center; color: var(--ink-3); }
+/* 產業分布：點一個產業篩選完整清單 */
+.ind-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; grid-template-rows: repeat(var(--rows, 4), auto); gap: 2px 28px; }
+@media (max-width: 860px) { .ind-grid { grid-template-columns: 1fr; grid-auto-flow: row; grid-template-rows: none; } }
+.ibar { font: inherit; display: grid; grid-template-columns: 8.5em 1fr 3.6em; gap: 8px; align-items: center; background: transparent; border: 0; padding: 5px 6px; border-radius: 6px; cursor: pointer; color: var(--ink); text-align: left; width: 100%; }
+.ibar .nm { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ibar .tr { height: 10px; background: var(--grid); border-radius: 0 4px 4px 0; position: relative; }
+.ibar .fl { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 0 4px 4px 0; }
+.ibar .vl { font-family: var(--font-num); font-size: 12.5px; text-align: right; color: var(--ink-2); }
+.ibar[aria-pressed="true"] { background: var(--s1-soft); }
+.ibar[aria-pressed="true"] .nm { font-weight: 700; }
+@media (hover: hover) { .ibar:hover { background: var(--bg); } }
+.ind-more { font: inherit; font-size: 12.5px; color: var(--ink-3); background: none; border: 0; padding: 6px; cursor: pointer; }
+.ind-filter { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
+.ind-filter button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.itag { font: inherit; font-size: 11px; border: 0; cursor: pointer; }
+#dayTable th:nth-child(4), #dayTable td:nth-child(4) { text-align: left; }
 /* 展示版：最近幾天上鎖。名單是假的文字再模糊處理，真的名單不在頁面裡 */
 .lock-wrap { position: relative; overflow: hidden; }
 .lock-list { filter: blur(5px); user-select: none; pointer-events: none; }
@@ -264,14 +280,22 @@ footer { font-size: 12px; color: var(--ink-3); }
     </div>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="indPanel">
+    <h2>產業分布</h2>
+    <p class="hint" id="indHint"></p>
+    <div class="ind-grid" id="indBars"></div>
+    <div id="indMoreBox"></div>
+  </section>
+
+  <section class="panel" id="tablePanel">
     <div class="tabs">
       <div class="seg" id="listSeg" role="group" aria-label="清單"></div>
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
+    <div class="ind-filter" id="indFilter" hidden></div>
     <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
-      <table class="freeze">
+      <table class="freeze" id="dayTable">
         <thead><tr id="thead"></tr></thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -366,11 +390,11 @@ const DATA = __DATA__;
 const P = DATA.params;
 const INV = [["投信", "投信（投本比）"], ["三大法人", "三大法人"]];
 const COLS = [
-  ["c", "代號"], ["n", "名稱"], ["m", "市場"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
+  ["c", "代號"], ["n", "名稱"], ["ind", "產業"], ["m", "市場"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
-const state = { wshown: 6, week: null, wlist: "picks", wsort: ["d", -1], wq: "", shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", h: 20 };
+const state = { wshown: 6, week: null, wlist: "picks", wsort: ["d", -1], wq: "", shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", ind: "", indAll: false, h: 20 };
 const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");
@@ -429,7 +453,7 @@ function renderDates() {
   dates.slice(0, state.shown).forEach(d => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = (isLocked(d) ? "🔒 " : "") + dlabel(d); b.setAttribute("aria-pressed", String(state.date === d));
-    b.onclick = () => { state.date = d; render(); };
+    b.onclick = () => { state.date = d; state.ind = ""; render(); };
     box.appendChild(b);
   });
   const left = dates.length - state.shown;
@@ -490,7 +514,7 @@ const WEEKS = (() => {   // 新到舊；每週 ds 由舊到新、wd 是週一～
 const wkOf = () => WEEKS.find(w => w.k === state.week) || WEEKS[0];
 const mdS = ds => `${+ds.slice(4, 6)}/${+ds.slice(6)}`;
 // 手機上先看得到「本週每天」，所以排在名稱後面；市場放最後
-const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "上榜後漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
+const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["ind", "產業"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "上榜後漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
 
 function weekAgg(w, inv) {
   const agg = new Map();
@@ -498,7 +522,7 @@ function weekAgg(w, inv) {
     const e = DATA.dates[ds][inv];
     [["picks", 1], ["strong", 2]].forEach(([lst, v]) => e[lst].forEach(r => {
       let a = agg.get(r.c);
-      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, pe: null, wn: null, first: {} });
+      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, ind: r.ind || "", st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, pe: null, wn: null, first: {} });
       a.st[ds] = a.st[ds] || v;
       if (!a.first[v]) a.first[v] = { ds, p: r.p };   // 這週第一次上榜（重複上榜以第一天為準）
       if (v === 1) { a.dp++; a.fp = Math.max(a.fp, r.f); if (r.b) a.b = true; } else { a.ds++; a.fs = Math.max(a.fs, r.f); }
@@ -566,7 +590,7 @@ function renderWeekTable(w, picks, strong) {
     if (k === "days") { th.textContent = label; head.appendChild(th); return; }
     th.setAttribute("aria-sort", state.wsort[0] === k ? (state.wsort[1] > 0 ? "ascending" : "descending") : "none");
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.onclick = () => { state.wsort = [k, state.wsort[0] === k ? -state.wsort[1] : (["c", "n", "m"].includes(k) ? 1 : -1)]; renderWeek(); };
+    b.onclick = () => { state.wsort = [k, state.wsort[0] === k ? -state.wsort[1] : (["c", "n", "m", "ind"].includes(k) ? 1 : -1)]; renderWeek(); };
     th.appendChild(b); head.appendChild(th);
   });
   const wEnd = w.ds[w.ds.length - 1];
@@ -591,8 +615,8 @@ function renderWeekTable(w, picks, strong) {
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
   const later = SER ? "—" : "…";
-  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
-    : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span></td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
+    : `<tr><td colspan="10" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
   $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
 }
@@ -670,23 +694,55 @@ const numOr = v => (v === null || v === undefined || v === "" ? -1e9 : +v);
 function renderTable(e) {
   if (!e || !e.picks) return;   // 展示版上鎖的日子沒有名單
   seg($("listSeg"), [["picks", `顯著買超 ${e.picks.length}`], ["strong", `買方轉強 ${e.strong.length}`]], "list", () => renderTable(cur()));
+  renderInd(e);
   const head = $("thead"); head.innerHTML = "";
   COLS.forEach(([k, label]) => {
     const th = document.createElement("th");
     th.setAttribute("aria-sort", state.sort[0] === k ? (state.sort[1] > 0 ? "ascending" : "descending") : "none");
     const b = document.createElement("button"); b.type = "button"; b.textContent = label;
-    b.onclick = () => { state.sort = [k, state.sort[0] === k ? -state.sort[1] : (["c", "n", "m"].includes(k) ? 1 : -1)]; renderTable(cur()); };
+    b.onclick = () => { state.sort = [k, state.sort[0] === k ? -state.sort[1] : (["c", "n", "m", "ind"].includes(k) ? 1 : -1)]; renderTable(cur()); };
     th.appendChild(b); head.appendChild(th);
   });
   const q = state.q.trim().toLowerCase();
-  let rows = e[state.list].filter(r => !q || r.c.includes(q) || r.n.toLowerCase().includes(q));
+  let rows = e[state.list].filter(r => (!q || r.c.includes(q) || r.n.toLowerCase().includes(q)) && (!state.ind || r.ind === state.ind));
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="12" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
+// 產業分布：依目前的清單（顯著買超／買方轉強）統計；點一個產業 → 完整清單只看那個產業
+const IND_TOP = 8;
+function setInd(k) { state.ind = state.ind === k ? "" : k; renderTable(cur()); }
+function renderInd(e) {
+  const list = e[state.list], cnt = {};
+  list.forEach(r => { const k = r.ind || "其他"; cnt[k] = (cnt[k] || 0) + 1; });
+  const items = Object.entries(cnt).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"));
+  if (state.ind && !cnt[state.ind]) state.ind = "";
+  $("indPanel").hidden = !list.length || !list.some(r => r.ind);
+  $("indHint").textContent = `${state.list === "picks" ? "顯著買超" : "買方轉強"}的 ${list.length} 檔依產業分類。點一個產業，下面的完整清單就只顯示那個產業。`;
+  const mx = Math.max(1, ...items.map(x => x[1]));
+  const show = state.indAll ? items : items.slice(0, IND_TOP);
+  $("indBars").style.setProperty("--rows", Math.ceil(show.length / 2));
+  $("indBars").innerHTML = show.map(([k, v]) => `<button type="button" class="ibar" data-ind="${k}" aria-pressed="${state.ind === k}"><span class="nm">${k}</span><span class="tr"><span class="fl" style="width:${(v / mx * 100).toFixed(1)}%;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></span><span class="vl">${v} 檔</span></button>`).join("");
+  $("indMoreBox").innerHTML = items.length > IND_TOP ? `<button type="button" class="ind-more" id="indMore">${state.indAll ? "收合 ▴" : `顯示全部 ${items.length} 個產業 ▾`}</button>` : "";
+  const f = $("indFilter");
+  f.hidden = !state.ind;
+  f.innerHTML = state.ind ? `<span>只看「<b>${state.ind}</b>」${cnt[state.ind]} 檔</span><button type="button" id="indClear">✕ 顯示全部</button>` : "";
+}
+$("indPanel").onclick = ev => {
+  if (ev.target.closest("#indMore")) { state.indAll = !state.indAll; renderInd(cur()); return; }
+  const b = ev.target.closest(".ibar");
+  if (!b) return;
+  setInd(b.dataset.ind);
+  if (state.ind) $("tablePanel").scrollIntoView({ behavior: "smooth", block: "start" });
+};
+$("indFilter").onclick = ev => { if (ev.target.closest("#indClear")) setInd(state.ind); };
 const rowOf = tr => tr && cur()[state.list].find(r => r.c === tr.dataset.c);
-$("tbody").onclick = ev => { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); };
+$("tbody").onclick = ev => {
+  const t = ev.target.closest(".itag");
+  if (t) { setInd(t.dataset.ind); return; }   // 點產業標籤 → 篩選，不開明細
+  const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r);
+};
 $("tbody").onkeydown = ev => { if (ev.key === "Enter") { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); } };
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
 let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); if (!$("dlg").hidden && SER) renderDetail(); }, 120); });
@@ -769,8 +825,15 @@ const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][i
 const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
 const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
 
+const indOf = c => {
+  for (const ds of dates) for (const inv of ["投信", "三大法人"]) {
+    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
+    if (r && r.ind) return r.ind;
+  }
+  return "";
+};
 function openDetail(r, ds) {
-  Object.assign(det, { code: r.c, name: r.n, m: r.m, inv: state.inv, date: ds || state.date, last: document.activeElement });
+  Object.assign(det, { code: r.c, name: r.n, m: r.m, ind: r.ind || indOf(r.c), inv: state.inv, date: ds || state.date, last: document.activeElement });
   hideTip();
   $("dlg").hidden = false; document.body.classList.add("noscroll");
   $("dlgClose").focus();
@@ -789,7 +852,7 @@ function renderDetail() {
   const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
   $("dlgTitle").textContent = `${det.code} ${det.name}`;
   paintStar();
-  $("dlgSub").innerHTML = `${det.m}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
+  $("dlgSub").innerHTML = `${det.m}${det.ind ? "・" + det.ind : ""}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
   const box = $("dlgInv"); box.innerHTML = "";
   INV.forEach(([val, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(det.inv === val));
