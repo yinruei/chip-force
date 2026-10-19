@@ -135,6 +135,21 @@ tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; 
 .dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .dlg-head h2 { font-size: 20px; }
 .dlg-head .sub { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
+/* 自選追蹤 */
+.star { color: #d99a00; margin-left: 4px; font-size: 12px; }
+.wbtn { font: inherit; font-size: 13px; background: transparent; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; height: 34px; padding: 0 10px; cursor: pointer; white-space: nowrap; }
+.wbtn[aria-pressed="true"] { color: #a87400; border-color: #d99a00; background: rgb(217 154 0 / .10); font-weight: 500; }
+.dlg-btns { display: flex; gap: 8px; flex: none; }
+.watch-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 12px; margin-bottom: 6px; }
+.watch-note { font-size: 12.5px; color: var(--ink-3); font-weight: 400; }
+.wl-row { display: grid; grid-template-columns: minmax(8em, 1.4fr) 1fr 1fr 7em 28px; gap: 8px; align-items: center; padding: 7px 4px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13.5px; }
+.wl-row:last-child { border-bottom: 0; }
+.wl-row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.wl-row .xbtn { width: 28px; height: 28px; font-size: 13px; }
+.chip { display: inline-block; padding: 0 7px; border-radius: 4px; font-size: 12px; line-height: 1.7; white-space: nowrap; border: 1px solid var(--line); color: var(--ink-3); }
+.chip.p1 { background: var(--s1); border-color: var(--s1); color: #fff; }
+.chip.p2 { background: var(--s2-soft); border-color: var(--s2); color: var(--s2); }
+@media (max-width: 560px) { .wl-row { grid-template-columns: 1fr auto auto 28px; } .wl-last { display: none; } }
 .xbtn { font: inherit; font-size: 18px; line-height: 1; background: transparent; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; flex: none; }
 .dlg-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .dlg-stats > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
@@ -221,6 +236,11 @@ footer { font-size: 12px; color: var(--ink-3); }
     <div class="kpi"><div class="k">成交量門檻濾掉</div><div class="v" id="kCut">0</div><div class="sub" id="kCutSub"></div></div>
   </section>
 
+  <section class="panel" id="watchPanel" hidden>
+    <div class="watch-head"><h2>⭐ 我的追蹤 <span id="wlCount" class="watch-note"></span></h2><div id="pushBox" class="watch-note"></div></div>
+    <div id="wlBody"></div>
+  </section>
+
   <section class="panels">
     <div class="panel">
       <h2>力度排行</h2>
@@ -302,7 +322,7 @@ footer { font-size: 12px; color: var(--ink-3); }
 </div>
 <div id="dlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
   <div class="dlg-card">
-    <div class="dlg-head"><div><h2 id="dlgTitle"></h2><div class="sub" id="dlgSub"></div></div><button type="button" class="xbtn" id="dlgClose" aria-label="關閉">✕</button></div>
+    <div class="dlg-head"><div><h2 id="dlgTitle"></h2><div class="sub" id="dlgSub"></div></div><div class="dlg-btns"><button type="button" class="wbtn" id="dlgStar" hidden aria-pressed="false">☆ 追蹤</button><button type="button" class="xbtn" id="dlgClose" aria-label="關閉">✕</button></div></div>
     <div><div class="seg" id="dlgInv" role="group" aria-label="法人"></div></div>
     <div id="dlgBody"></div>
   </div>
@@ -368,6 +388,7 @@ function render() {
   $("viewBt").hidden = state.view !== "bt";
   $("dateWrap").hidden = state.view !== "pick";
   $("weekWrap").hidden = state.view !== "week";
+  renderWatch();
   renderDates();
   seg($("invSeg"), INV, "inv", render);
   if (state.view === "week") { renderWeek(); return; }
@@ -510,7 +531,7 @@ function renderWeekTable(w, picks, strong) {
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
   const later = SER ? "—" : "…";
-  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
     : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
   $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
@@ -599,7 +620,7 @@ function renderTable(e) {
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 const rowOf = tr => tr && cur()[state.list].find(r => r.c === tr.dataset.c);
 $("tbody").onclick = ev => { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); };
@@ -673,7 +694,9 @@ function renderBtChart() {
 }
 /* ---- 個股明細：點股票才載入近 60 日資料（series.json） ---- */
 let SER = null, serLoading = null;
-const loadSeries = () => serLoading || (serLoading = fetch("series.json", { credentials: "same-origin" })
+// 展示版（/demo）的明細另外放，不需要登入
+const SERIES_URL = DATA.demo ? "/demo/series.json" : "series.json";
+const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credentials: "same-origin" })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(j => (SER = j)).catch(e => { serLoading = null; throw e; }));
 const SKEY = { "三大法人": ["i", "fi"], "投信": ["t", "ft"] };
@@ -702,6 +725,7 @@ function renderDetail() {
   const e = DATA.dates[det.date] && DATA.dates[det.date][det.inv];
   const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
   $("dlgTitle").textContent = `${det.code} ${det.name}`;
+  paintStar();
   $("dlgSub").innerHTML = `${det.m}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
   const box = $("dlgInv"); box.innerHTML = "";
   INV.forEach(([val, label]) => {
@@ -813,5 +837,99 @@ $("themeBtn").onclick = () => {
 };
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", paintThemeBtn);
 paintThemeBtn();
+
+/* ---- 自選追蹤與上榜通知（只有登入後的會員頁有；展示版和本機檔案不會出現） ---- */
+const WATCH = { on: false, items: [], max: 50 };
+const watched = c => WATCH.on && WATCH.items.some(x => x.c === c);
+const star = c => watched(c) ? '<span class="star" title="追蹤中">★</span>' : "";
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : { credentials: "same-origin" });
+  const j = await r.json().catch(() => null);
+  if (!j) throw new Error("not json");
+  if (!r.ok) throw Object.assign(new Error(j.error || String(r.status)), { data: j });
+  return j;
+}
+async function loadWatch() {
+  if (DATA.demo || location.protocol === "file:") return;
+  try { const j = await api("/api/watch"); Object.assign(WATCH, { on: true, items: j.items || [], max: j.max || 50 }); render(); renderPush(); } catch (e) { /* 沒有這個功能的環境就不顯示 */ }
+}
+async function toggleWatch(x) {
+  try { WATCH.items = (await api("/api/watch", { c: x.c, n: x.n, m: x.m, on: !watched(x.c) })).items; }
+  catch (e) { alert(e.data && e.data.error ? e.data.error : "儲存失敗，請稍後再試。"); return; }
+  render();
+  if (!$("dlg").hidden) paintStar();
+}
+function paintStar() {
+  const b = $("dlgStar"), on = watched(det.code);
+  b.hidden = !WATCH.on; b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "★ 追蹤中" : "☆ 追蹤";
+}
+$("dlgStar").onclick = () => toggleWatch({ c: det.code, n: det.name, m: det.m });
+const lastListed = (c, upto) => dates.find(ds => ds <= upto && (listed(ds, "投信", c) || listed(ds, "三大法人", c))) || null;
+function renderWatch() {
+  const box = $("watchPanel");
+  box.hidden = !WATCH.on || state.view !== "pick";
+  if (box.hidden) return;
+  $("wlCount").textContent = WATCH.items.length ? `${WATCH.items.length} 檔` : "";
+  if (!WATCH.items.length) {
+    $("wlBody").innerHTML = '<p class="watch-note">打開任一檔的個股明細，按右上角「☆ 追蹤」就會加到這裡。開啟上榜通知後，追蹤的股票上榜時，每個交易日收盤更新完會通知你。</p>';
+    return;
+  }
+  const chip = (inv, v) => `<span class="chip ${v === 1 ? "p1" : v === 2 ? "p2" : ""}">${inv === "投信" ? "投信" : "三大"} ${v === 1 ? "顯著" : v === 2 ? "轉強" : "—"}</span>`;
+  const rows = WATCH.items.map(x => ({ ...x, t: listed(state.date, "投信", x.c), i: listed(state.date, "三大法人", x.c), last: lastListed(x.c, state.date) }))
+    .sort((p, q) => (q.t || q.i ? 1 : 0) - (p.t || p.i ? 1 : 0) || (q.last || "").localeCompare(p.last || ""));
+  $("wlBody").innerHTML = rows.map(x => `<div class="wl-row" data-c="${x.c}" tabindex="0"><div><span class="num">${x.c}</span> ${x.n}</div><div>${chip("投信", x.t)}</div><div>${chip("三大法人", x.i)}</div><div class="wl-last watch-note">${x.last ? (x.last === state.date ? "這天上榜" : `最近上榜 ${mdS(x.last)}`) : "近期沒上榜"}</div><button type="button" class="xbtn wl-x" aria-label="取消追蹤 ${x.n}" title="取消追蹤">✕</button></div>`).join("")
+    + `<p class="watch-note" style="margin:6px 0 0">顯示 ${dlabel(state.date)} 的狀態，點一檔看明細。</p>`;
+}
+$("wlBody").onclick = ev => {
+  const row = ev.target.closest(".wl-row"), x = row && WATCH.items.find(i => i.c === row.dataset.c);
+  if (!x) return;
+  if (ev.target.closest(".wl-x")) toggleWatch(x); else openDetail(x);
+};
+$("wlBody").onkeydown = ev => { if (ev.key === "Enter" && ev.target.classList.contains("wl-row")) $("wlBody").onclick(ev); };
+
+// 推播：Android 的 Chrome 直接可以用；iPhone 要先「加入主畫面」，從主畫面打開才支援
+const pushOK = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const urlB64 = s => Uint8Array.from(atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")), ch => ch.charCodeAt(0));
+async function currentSub() {
+  const reg = await navigator.serviceWorker.getRegistration("/");
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+async function renderPush() {
+  const box = $("pushBox");
+  if (!WATCH.on) return;
+  if (!pushOK()) { box.textContent = isIOS && !standalone() ? "📱 iPhone 要先把網站「加入主畫面」，從主畫面打開才能開啟上榜通知" : "這個瀏覽器不支援通知"; return; }
+  if (Notification.permission === "denied") { box.textContent = "🔕 通知被封鎖了，請到瀏覽器或手機設定裡允許本站通知"; return; }
+  const sub = await currentSub().catch(() => null);
+  box.innerHTML = sub ? `🔔 這台裝置已開啟上榜通知 <button type="button" class="wbtn" id="pushOff">關閉</button>` : `<button type="button" class="wbtn" id="pushOn">🔔 開啟上榜通知</button>`;
+  $(sub ? "pushOff" : "pushOn").onclick = sub ? disablePush : enablePush;
+}
+async function enablePush() {
+  // Safari 規定要在按下按鈕的當下就詢問權限，所以先問，再註冊
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return renderPush();
+  $("pushBox").textContent = "設定中…";
+  try {
+    const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    await navigator.serviceWorker.ready;
+    const { key } = await api("/api/push/key");
+    const old = await reg.pushManager.getSubscription();
+    if (old) await old.unsubscribe();   // 舊訂閱可能是用別的金鑰，重新訂一次
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64(key) });
+    await api("/api/push", { sub: sub.toJSON() });
+    reg.showNotification("上榜通知已開啟", { body: "你追蹤的股票上榜時，每個交易日收盤更新完會通知你。", icon: "/icon-192.png", tag: "chip-welcome" });
+  } catch (e) { alert("開啟通知失敗，請重新整理後再試一次。"); }
+  renderPush();
+}
+async function disablePush() {
+  try {
+    const sub = await currentSub();
+    if (sub) { await api("/api/push/off", { endpoint: sub.endpoint }).catch(() => {}); await sub.unsubscribe(); }
+  } catch (e) {}
+  renderPush();
+}
+
 render();
+loadWatch();
 </script>

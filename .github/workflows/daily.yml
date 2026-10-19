@@ -90,6 +90,15 @@ jobs:
         continue-on-error: true
         run: bash site/upload.sh
 
+      # 會員追蹤的股票今天上榜 → 推播通知（notify.py）；失敗不影響其他步驟
+      - name: 推播上榜通知
+        if: steps.chk.outputs.done != 'true' && env.CLOUDFLARE_API_TOKEN != ''
+        continue-on-error: true
+        run: |
+          pip install -q pywebpush==2.0.3
+          export KV_ID=$(bash site/kv_id.sh)
+          python notify.py
+
       # 把頁面上半部截成 PNG（output/screenshots/latest_投信.png 等），方便貼到 Skool；失敗不影響其他步驟
       - name: 產生 Skool 用截圖
         if: steps.chk.outputs.done != 'true'

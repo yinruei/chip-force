@@ -29,3 +29,11 @@ if [ -f output/series.json ]; then
     "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/series" > /dev/null
   echo "已上傳 series.json 到會員網站"
 fi
+# 展示版（/demo，不用登入；用延遲的舊資料）
+for pair in "demo.html:demo" "demo_series.json:demo_series"; do
+  f="output/${pair%%:*}"; key="${pair##*:}"
+  [ -f "$f" ] || continue
+  curl -fsS -X PUT -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" --data-binary @"$f" \
+    "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/${key}" > /dev/null
+  echo "已上傳 ${f} 到會員網站（${key}）"
+done

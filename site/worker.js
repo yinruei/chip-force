@@ -14,6 +14,11 @@
 //   rl:<key>       失敗次數（防暴力破解）
 //   dashboard      頁面 HTML（由 GitHub Actions 每天上傳）
 //   rst:<token>    重設密碼連結（自助 1 小時、管理者產生 24 小時）
+//   wl:<email>     追蹤的股票 [{c, n, m}]
+//   push:<email>   推播訂閱（每台裝置一筆，瀏覽器產生）
+//   vapid          推播金鑰（第一次有人開通知時自動產生；notify.py 用它簽名）
+//   notified       上次送出追蹤通知的交易日（notify.py 寫入，避免重複通知）
+//   demo、demo_series  展示版頁面與明細（延遲約一個月的資料）
 //
 // Secrets：SITE_SECRET（產生每月驗證碼）、ADMIN_PASSWORD（管理頁密碼）
 // 選填：RESEND_API_KEY + ADMIN_EMAIL（有人註冊時寄信通知管理者）
@@ -24,6 +29,7 @@
 // ============================================================
 
 import { ICON_512, ICON_192, ICON_180 } from "./icons.js";
+import { LEGAL_LINKS, TERMS_VERSION, termsBody, privacyBody, refundBody } from "./legal.js";
 
 const SESSION_DAYS = 30;
 const MAX_DEVICES = 2;
@@ -53,7 +59,24 @@ const MANIFEST = JSON.stringify({
   ],
 });
 const ICONS = { "/icon-512.png": ICON_512, "/icon-192.png": ICON_192, "/apple-touch-icon.png": ICON_180 };
+// 推播用的 service worker：只負責顯示通知、點通知打開網站，不快取任何頁面
+const SW_JS = `self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener("push", (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(d.title || "${APP_NAME}", { body: d.body || "", icon: "/icon-192.png", badge: "/icon-192.png", tag: d.tag || "chip-force", data: { url: d.url || "/" } }));
+});
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || "/";
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) if ("focus" in c) { c.navigate(url); return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
+});`;
 function appAsset(path) {
+  if (path === "/sw.js") return new Response(SW_JS, { headers: { "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" } });
   if (path === "/manifest.webmanifest") return new Response(MANIFEST, { headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=86400" } });
   const b64 = ICONS[path];
   if (!b64) return null;
@@ -137,7 +160,7 @@ async function addFail(env, key) {
 //   st:<email>    狀態 pending / active / disabled（只有註冊和管理者會寫）
 //   vm:<email>    已完成每月驗證的年月（會員輸入驗證碼）
 //   ss:<email>    登入中的裝置 session 清單（登入、登出、管理者）
-const ACCOUNT_FIELDS = ["email", "salt", "hash", "iter", "created", "skool"];
+const ACCOUNT_FIELDS = ["email", "salt", "hash", "iter", "created", "skool", "agreed"];   // agreed：同意的條款版本
 async function getUser(env, email) {
   const [raw, st, vm, ss] = await Promise.all(["user", "st", "vm", "ss"].map((p) => env.SITE_KV.get(`${p}:${email}`)));
   if (!raw) return null;
@@ -160,7 +183,7 @@ const setVerified = (env, email, ym) => env.SITE_KV.put(`vm:${email}`, ym);
 const setSessions = (env, email, list) => env.SITE_KV.put(`ss:${email}`, JSON.stringify(list));
 async function deleteUser(env, u) {
   await unbindHandle(env, u);
-  for (const p of ["user", "st", "vm", "ss"]) await env.SITE_KV.delete(`${p}:${u.email}`);
+  for (const p of ["user", "st", "vm", "ss", "wl", "push"]) await env.SITE_KV.delete(`${p}:${u.email}`);
 }
 // sk:<Skool 帳號> → email。一個 Skool 帳號只能綁一個 email，避免冒用別人的付費帳號
 async function handleOwner(env, h) { return env.SITE_KV.get(`sk:${h}`); }
@@ -228,7 +251,7 @@ function loginPage(err = "", note = "", email = "") {
     <label for="password">本站密碼（註冊時設的，不是 Skool 密碼）</label><input id="password" name="password" type="password" autocomplete="current-password" required>
     <button class="full" type="submit">登入</button>
   </form>
-  <p class="small" style="margin-top:16px"><a href="/forgot">忘記密碼？</a>・還沒有帳號？<a href="/register">用本月驗證碼註冊</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
+  <p class="small" style="margin-top:16px"><a href="/forgot">忘記密碼？</a>・還沒有帳號？<a href="/register">用本月驗證碼註冊</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}<p class="small">${LEGAL_LINKS}</p>`);
 }
 
 const HANDLE_HELP = `打開 Skool → 點右上角自己的頭像 → 個人檔案，網址 <b>skool.com/@</b> 後面那段就是（例如 @su-ray-2735），會員列表裡名字下方也看得到。管理者會用它確認你是付費會員。`;
@@ -244,6 +267,8 @@ function registerPage(env, err = "", email = "", handle = "") {
     <p class="small" style="margin:4px 0 0">這是籌碼力度網站自己的密碼，<b>不是 Skool 密碼</b>。請設一組和 Skool 不同的密碼；之後在 Skool 改密碼，這裡的密碼不會跟著變。</p>
     <label for="password2">再輸入一次本站密碼</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
     <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required>
+    <label style="display:flex;gap:8px;align-items:flex-start;color:var(--ink-2);font-size:14px;margin-top:16px"><input type="checkbox" name="agree" value="1" required style="width:auto;margin-top:4px">
+      <span>我已閱讀並同意<a href="/terms" target="_blank">服務條款</a>、<a href="/privacy" target="_blank">隱私權政策</a>與<a href="/refund" target="_blank">退款規則</a>，也了解本站內容不是投資建議。</span></label>
     <button class="full" type="submit">送出註冊</button>
   </form>
   <p class="small" style="margin-top:16px">已經有帳號？<a href="/login">登入</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
@@ -298,6 +323,7 @@ async function handleRegister(req, env, ip, origin) {
   if (!validEmail(email)) return again("Email 格式不正確。");
   if (password.length < 8) return again("密碼至少 8 碼。");
   if (password !== String(f.get("password2") || "")) return again("兩次輸入的密碼不一樣。");
+  if (f.get("agree") !== "1") return again("請先勾選同意服務條款、隱私權政策與退款規則。");
   if (!safeEqual(code, await monthCode(env, taipeiMonth()))) {
     await addFail(env, `reg:${ip}`);
     return again("驗證碼不正確，請確認是本月的驗證碼。");
@@ -310,7 +336,7 @@ async function handleRegister(req, env, ip, origin) {
   await setVerified(env, email, taipeiMonth());
   await setSessions(env, email, []);
   await env.SITE_KV.put(`sk:${handle}`, email);
-  await putAccount(env, { email, salt, hash, iter, created: new Date().toISOString(), skool: handle });
+  await putAccount(env, { email, salt, hash, iter, created: new Date().toISOString(), skool: handle, agreed: TERMS_VERSION });
   await notifyAdmin(env, email, handle, origin);
   return page("已送出", `<h1>註冊已送出</h1><p>管理者確認你是 Skool 付費會員後就會開通，通常一天內。開通後用剛才的 email 和你在本站設的密碼登入（不是 Skool 密碼）。</p><p><a href="/login">回登入頁</a></p>`);
 }
@@ -492,7 +518,25 @@ async function handleVerify(req, env, ip, cu) {
 async function serveDashboard(env, cu) {
   const html = await env.SITE_KV.get("dashboard");
   if (!html) return statusPage("頁面準備中", "今天的資料還沒上傳，請稍後再來。", cu.user.email);
-  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:#7a8085"><a href="/guide" style="color:inherit">使用說明</a>${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
+  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:#7a8085"><a href="/guide" style="color:inherit">使用說明</a><a href="/terms" style="color:inherit">條款</a>${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
+  return dashboardDoc(html, bar);
+}
+
+// 展示版：不用登入，資料是延遲約一個月的舊資料（由 build_dashboard.py 產生）。wrangler.toml 的 DEMO 設成 off 就關閉
+const joinUrl = (env) => env.JOIN_URL || "https://www.skool.com/fosi-trading-1190/plans";
+async function serveDemo(env) {
+  const html = env.DEMO === "off" ? null : await env.SITE_KV.get("demo");
+  if (!html) return page("展示版", `<h1>展示版暫停中</h1><p>想看完整內容，請加入 Skool 付費會員。</p><p><a href="${esc(joinUrl(env))}" target="_blank" rel="noopener">加入雷達席</a>・<a href="/login">會員登入</a></p>`, { status: 404 });
+  const m = html.match(/"demo":\{"until":"(\d{8})"\}/);
+  const until = m ? `${+m[1].slice(4, 6)}/${+m[1].slice(6)}` : "約一個月前";
+  const bar = `<div style="font:14px/1.5 system-ui,sans-serif;background:#0b1d44;color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:center;text-align:center">
+    <span><b>展示版</b>・資料停在 ${until}（約一個月前）。付費會員每個交易日 17:30 看到最新資料，還能追蹤個股、收到通知。</span>
+    <a href="${esc(joinUrl(env))}" target="_blank" rel="noopener" style="background:#fff;color:#0b1d44;border-radius:999px;padding:4px 14px;font-weight:600;text-decoration:none">加入雷達席</a>
+    <a href="/login" style="color:#cfe0ff">會員登入</a><a href="/guide" style="color:#cfe0ff">使用說明</a></div>`;
+  return dashboardDoc(html, bar);
+}
+
+function dashboardDoc(html, bar) {
   // dashboard.html 是不含 <html>/<body> 的頁面片段（原本給 Artifact 用），這裡補上完整骨架
   const doc = /<!doctype/i.test(html)
     ? html.replace(/<body([^>]*)>/i, (m) => m + bar)
@@ -513,16 +557,16 @@ function guidePage(env) {
     ["三大法人", "外資＋投信＋自營商合計，用「靈敏模式」。"],
     ["冷門股排除", "成交量太少的股票不列入，避免少量交易就排到前面。"],
   ].map(([k, v]) => `<tr><td style="white-space:nowrap"><b>${k}</b></td><td>${v}</td></tr>`).join("");
-  const toc = [["start", "第一次使用"], ["read", "頁面怎麼看"], ["week", "本週統整"], ["detail", "個股明細"], ["terms", "名詞解釋"], ["time", "更新時間"], ["account", "帳號與密碼"], ["faq", "常見問題"], ["note", "聲明"]]
+  const toc = [["start", "第一次使用"], ["read", "頁面怎麼看"], ["week", "本週統整"], ["watch", "追蹤與通知"], ["detail", "個股明細"], ["terms", "名詞解釋"], ["time", "更新時間"], ["account", "帳號與密碼"], ["faq", "常見問題"], ["note", "聲明"]]
     .map(([id, t]) => `<a href="#${id}">${t}</a>`).join("・");
   return page("使用說明", `<h1>使用說明</h1><p>籌碼力度選股是 Skool 付費會員專屬的每日選股網站：每個交易日收盤後，從全市場上市櫃普通股中，找出「投信」與「三大法人」買超力道明顯異常的股票，附上力度排行、圖表、完整清單和個股明細。</p>
   <p class="small">${toc}</p>
 
   <h2 id="start">第一次使用</h2>
-  <p>僅限訂閱 Skool <b>月費方案</b>的付費會員；免費會員無法開通。</p>
+  <p>僅限訂閱 Skool <b>月費方案</b>的付費會員；免費會員無法開通。還不是會員？可以先看<a href="/demo">展示版</a>（約一個月前的資料，不用登入）。</p>
   <ol>
     <li>到 Skool 付費課程拿<b>本月驗證碼</b>（${skoolLink(env, "打開 Skool 課程")}）。</li>
-    <li>到<a href="/register">註冊頁</a>填寫：
+    <li>到<a href="/register">註冊頁</a>填寫（並勾選同意<a href="/terms">服務條款</a>、<a href="/privacy">隱私權政策</a>與<a href="/refund">退款規則</a>）：
       <ul>
         <li><b>Email</b>：請用你 Skool 帳號的 email</li>
         <li><b>Skool 帳號</b>：個人檔案網址 skool.com/@ 後面那段，例如 @su-ray-2735（不是顯示名稱）。找法：Skool 右上角頭像 → 個人檔案 → 看網址</li>
@@ -562,6 +606,16 @@ function guidePage(env) {
     <li><b>最強力度</b>：這週上榜那幾天裡最高的力度。<b>本週法人買賣超</b>：整週每天加起來的張數。<b>上榜後漲跌%</b>：從這週<b>第一次上榜那天</b>的收盤，算到這週最後一個交易日的收盤；重複上榜的以第一天為準，最後一天才上榜的顯示「剛上榜」。</li>
     <li>點任一檔一樣可以打開個股明細。</li>
     <li><b>提醒</b>：重複上榜代表法人這週連續在買，但不代表之後一定比較強。用過去一年的資料統計，一週上榜很多次的股票，在那一週通常已經漲了一段，之後的表現並沒有比只上榜一次的好。請把它當成「這週法人在忙什麼」的整理，不是買進清單。</li>
+  </ul>
+
+  <h2 id="watch">追蹤與通知</h2>
+  <ul>
+    <li><b>加入追蹤</b>：打開任一檔的個股明細，按右上角「☆ 追蹤」。追蹤的股票會出現在選股頁的「⭐ 我的追蹤」，清單裡名稱旁邊也會有 ★。最多 50 檔。</li>
+    <li><b>我的追蹤</b>：顯示選到那一天，每檔在投信、三大法人有沒有上榜（藍＝顯著買超、橘＝買方轉強），以及最近一次上榜的日子。點一檔看明細，按 ✕ 取消追蹤。</li>
+    <li><b>上榜通知</b>：在「我的追蹤」按「🔔 開啟上榜通知」並允許通知。之後每個交易日收盤更新完（約 17:40），你追蹤的股票有上榜就會通知你；沒有上榜就不會打擾你。每台裝置要各自開啟，一個帳號最多 3 台。</li>
+    <li><b>iPhone／iPad</b>：需要 iOS 16.4 以上，而且要先把網站「加入主畫面」，<b>從主畫面的圖示打開</b>，才能開啟通知（用 Safari 分頁打開不行）。</li>
+    <li><b>Android</b>：用 Chrome 打開就能開啟；加到主畫面更方便。</li>
+    <li><b>收不到通知？</b>確認手機設定裡允許「籌碼力度選股」（或瀏覽器）的通知、沒有開勿擾或專注模式；也可以按「關閉」再重新開啟一次。還是不行的話，在 Skool 私訊管理者，管理者可以送一則測試通知給你。</li>
   </ul>
 
   <h2 id="detail">個股明細</h2>
@@ -607,6 +661,7 @@ function guidePage(env) {
 
   <h2 id="note">聲明</h2>
   <p>本站內容依證交所、櫃買中心公開的法人買賣超資料統計，<b>僅供研究與學習參考，不構成任何投資建議或買賣推薦</b>。統計結果不代表未來表現，請依自己的判斷與風險承受度做決定。</p>
+  <p>使用本站即表示同意${LEGAL_LINKS}。</p>
   <p class="small" style="margin-top:20px"><a href="/">回到選股頁面</a>・<a href="/login">登入</a>・${skoolLink(env, "Skool 課程")}</p>`, { wide: true });
 }
 
@@ -740,6 +795,61 @@ async function adminAction(req, env, origin) {
   return adminHome(env, "不明的操作。");
 }
 
+// ---------- 自選追蹤與推播通知（已開通、本月已驗證的會員才能用） ----------
+const MAX_WATCH = 50, MAX_PUSH = 3;
+const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+async function getJSON(env, key, dflt) {
+  const v = await env.SITE_KV.get(key);
+  try { return v ? JSON.parse(v) : dflt; } catch (e) { return dflt; }
+}
+const b64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+async function vapidPublicKey(env) {
+  let v = await getJSON(env, "vapid", null);
+  if (!v) {
+    const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const jwk = await crypto.subtle.exportKey("jwk", kp.privateKey);
+    v = { public: b64url(await crypto.subtle.exportKey("raw", kp.publicKey)), d: jwk.d, created: new Date().toISOString() };
+    await env.SITE_KV.put("vapid", JSON.stringify(v));
+  }
+  return v.public;
+}
+async function handleApi(req, env, cu, path) {
+  const email = cu.user.email;
+  const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
+  if (path === "/api/watch") {
+    let items = await getJSON(env, `wl:${email}`, []);
+    if (req.method === "POST") {
+      const c = String(body.c || "").trim().toUpperCase();
+      if (!/^[0-9]{4,6}[A-Z]?$/.test(c)) return json({ error: "代號不正確" }, 400);
+      items = items.filter((x) => x.c !== c);
+      if (body.on) {
+        if (items.length >= MAX_WATCH) return json({ error: `最多追蹤 ${MAX_WATCH} 檔`, items }, 400);
+        items.push({ c, n: String(body.n || "").slice(0, 20), m: body.m === "上櫃" ? "上櫃" : "上市" });
+      }
+      await env.SITE_KV.put(`wl:${email}`, JSON.stringify(items));
+    }
+    return json({ items, max: MAX_WATCH });
+  }
+  if (path === "/api/push/key") return json({ key: await vapidPublicKey(env) });
+  if (path === "/api/push" && req.method === "POST") {
+    const sub = body.sub || {};
+    const ok = typeof sub.endpoint === "string" && /^https:\/\//.test(sub.endpoint) && sub.endpoint.length < 1000
+      && sub.keys && typeof sub.keys.p256dh === "string" && typeof sub.keys.auth === "string";
+    if (!ok) return json({ error: "通知訂閱資料不正確" }, 400);
+    let subs = (await getJSON(env, `push:${email}`, [])).filter((x) => x.endpoint !== sub.endpoint);
+    subs.push({ endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh.slice(0, 200), auth: sub.keys.auth.slice(0, 100) }, at: new Date().toISOString() });
+    subs = subs.slice(-MAX_PUSH);   // 每個帳號最多 3 台裝置，最舊的移除
+    await env.SITE_KV.put(`push:${email}`, JSON.stringify(subs));
+    return json({ ok: true, devices: subs.length });
+  }
+  if (path === "/api/push/off" && req.method === "POST") {
+    const subs = (await getJSON(env, `push:${email}`, [])).filter((x) => x.endpoint !== body.endpoint);
+    await env.SITE_KV.put(`push:${email}`, JSON.stringify(subs));
+    return json({ ok: true, devices: subs.length });
+  }
+  return json({ error: "not found" }, 404);
+}
+
 // ---------- 路由 ----------
 // Cloudflare 排程 → 觸發 GitHub 每日選股（auto=true：當天已完成就略過）
 async function triggerDaily(env) {
@@ -800,6 +910,13 @@ export default {
     if (path === "/forgot") return req.method === "POST" ? handleForgot(req, env, ip, url.origin) : forgotPage(env);
     if (path === "/reset") return handleReset(req, env, url);
     if (path === "/guide") return guidePage(env);
+    if (path === "/demo") return serveDemo(env);
+    if (path === "/demo/series.json") {
+      const js = env.DEMO === "off" ? null : await env.SITE_KV.get("demo_series");
+      return new Response(js || "{}", { status: js ? 200 : 404, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    }
+    const legal = { "/terms": ["服務條款", termsBody], "/privacy": ["隱私權政策", privacyBody], "/refund": ["退款規則", refundBody] }[path];
+    if (legal) return page(legal[0], `${legal[1]()}<p class="small" style="margin-top:24px">${LEGAL_LINKS}・<a href="/guide">使用說明</a>・<a href="/">回到網站</a></p>`, { wide: true });
 
     const cu = await currentUser(env, req);
     if (!cu) return redirect("/login");
@@ -812,6 +929,7 @@ export default {
       return verifyPage(env, cu.user.email);
     }
     if (path === "/" || path === "/verify") return serveDashboard(env, cu);
+    if (path.startsWith("/api/")) return handleApi(req, env, cu, path);
     // 個股明細資料：和選股頁一樣，要已開通且完成本月驗證
     if (path === "/series.json") {
       const js = await env.SITE_KV.get("series");

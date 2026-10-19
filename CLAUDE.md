@@ -49,4 +49,10 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 
 個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 三大法人／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤，約 1MB，不進 git），`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
 產業觀察圖：`social_card.py` 每天在截圖步驟產生 `output/social/latest_產業觀察.png`（1080×1350，給 Threads／IG），只顯示各產業的顯著買超檔數、不出現個股；產業分類由 `industry.py` 從證交所 ISIN 一覽表（Big5，上市 strMode=2、上櫃 strMode=4）抓，快取 `data/industry.csv`，7 天更新一次。
+法律頁面在 `site/legal.js`（`/terms`、`/privacy`、`/refund`，公開），註冊必須勾選同意，帳號記錄同意的條款版本 `agreed`（＝`TERMS_VERSION`）。
+
+展示版 `/demo`（公開）：`build_dashboard.py` 的 `build_demo()` 取延遲 `DEMO_LAG`=20 個交易日的 `DEMO_DAYS`=10 天，產生 `output/demo.html`（DATA 帶 `demo.until`）與 `output/demo_series.json`（不進 git），上傳到 KV `demo`、`demo_series`；頁面明細改讀 `/demo/series.json`，展示版不顯示追蹤功能。`wrangler.toml` 的 `DEMO = "off"` 可關閉。
+
+自選追蹤與上榜通知：KV `wl:<email>`（[{c,n,m}]，最多 50）、`push:<email>`（Web Push 訂閱，最多 3）、`vapid`（Worker 在第一次 `/api/push/key` 時產生的 P-256 金鑰，`public` 給瀏覽器、`d` 給 `notify.py` 簽名）、`notified`（上次通知的交易日）。Worker API：`GET/POST /api/watch`、`GET /api/push/key`、`POST /api/push`、`POST /api/push/off`（都要已開通且本月已驗證）；`/sw.js` 只顯示通知、不快取。`daily.yml` 上傳後跑 `notify.py`（pywebpush），條件和看頁面一樣（`st` 為 active、`vm` 為本月）；推播服務回 404/410 就移除該裝置。手動測試：Actions「測試上榜通知」（`notify.py --test EMAIL`）。刪除帳號會一併刪 `wl:`、`push:`。
+
 會員網站有 manifest 與主畫面圖示（`site/icons.js` 由 `site/icon.svg` 轉成 PNG 內嵌），手機加到主畫面會像 APP 全螢幕開啟。

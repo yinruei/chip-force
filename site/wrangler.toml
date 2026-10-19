@@ -17,3 +17,7 @@ crons = ["30 9-14 * * MON-FRI"]
 GH_REPO = "yinruei/chip-force"
 # 放本月驗證碼的 Skool 課程網址（註冊頁、驗證頁、使用說明會連到這裡）
 SKOOL_URL = "https://www.skool.com/fosi-trading-1190/classroom/f2d532b7?md=38579a96eb5a4c3faeaeb2d3c9c4b917"
+# 付費方案頁（展示版的「加入雷達席」按鈕）
+JOIN_URL = "https://www.skool.com/fosi-trading-1190/plans"
+# 展示版 /demo（不用登入、延遲約一個月的資料）。律師建議不要公開時改成 "off"
+DEMO = "on"

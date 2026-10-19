@@ -68,6 +68,8 @@ jobs:
             t "POST /login（不存在的帳號，會跑一次密碼雜湊）" -X POST -H "Origin: $SITE" --data "email=site-check@example.invalid&password=wrong-password" "$SITE/login"
             t "GET /（未登入，應該 303）" "$SITE/"
             t "GET /guide" "$SITE/guide"
+            t "GET /demo（展示版）" "$SITE/demo"
+            t "GET /terms" "$SITE/terms"
           done
           sleep 8
           pkill -f "wrangler.*tail" || true

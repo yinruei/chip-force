@@ -20,6 +20,9 @@ SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/b
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"三大法人": "靈敏", "投信": "穩健"}
+# 展示版（/demo，不用登入）：用延遲的舊資料讓非會員看介面；付費會員才看得到最新的
+DEMO_LAG = 20    # 至少延遲幾個交易日（約一個月）
+DEMO_DAYS = 10   # 顯示幾個交易日（兩週，「本週統整」才看得出效果）
 
 
 def row(r: dict, close: dict, prev: dict) -> dict:
@@ -159,6 +162,31 @@ def main() -> None:
     (c.OUT / "series.json").write_text(json.dumps(ser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"series.json：{len(ser['s'])} 檔、{len(ser['d'])} 天")
     print(f"dashboard.html：{', '.join(out['dates'])}")
+    build_demo(out, ser, html_tpl=(HERE / "dashboard_template.html").read_text(encoding="utf-8"))
+
+
+def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
+    """展示版：取 DEMO_LAG 個交易日以前的 DEMO_DAYS 天，個股明細也只到那一天。"""
+    ds_all = sorted(out["dates"])
+    # 結束日：至少 DEMO_LAG 個交易日以前，而且兩份清單都有內容的最近一天（第一眼不要看到空清單）
+    j = len(ds_all) - 1 - DEMO_LAG
+    while j >= DEMO_DAYS - 1 and not all(len(out["dates"][ds_all[j]][inv]["picks"]) >= 3 for inv in MODES):
+        j -= 1
+    keep = ds_all[max(0, j - DEMO_DAYS + 1):j + 1] if j >= 0 else []
+    if len(keep) < DEMO_DAYS:
+        print("資料天數不夠，略過展示版")
+        return
+    end = keep[-1]
+    demo = {"params": out["params"], "dates": {d: out["dates"][d] for d in keep}, "demo": {"until": end}}
+    codes = {r["c"] for e in demo["dates"].values() for inv in e for lst in ("picks", "strong") for r in e[inv][lst]}
+    n = ser["d"].index(end) + 1 if end in ser["d"] else 0
+    dser = {"d": ser["d"][:n], "s": {k: {f: v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}
+    note = f"展示版：資料停在 {end[:4]}-{end[4:6]}-{end[6:]}；付費會員每個交易日 17:30 看到最新資料"
+    html = html_tpl.replace("資料更新於 __UPDATED__（台北時間）", note)
+    html = html.replace("__DATA__", json.dumps(demo, ensure_ascii=False, separators=(",", ":")))
+    (c.OUT / "demo.html").write_text(html, encoding="utf-8")
+    (c.OUT / "demo_series.json").write_text(json.dumps(dser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    print(f"demo.html：{keep[0]} ～ {end}，明細 {len(dser['s'])} 檔")
 
 
 if __name__ == "__main__":
