@@ -83,7 +83,8 @@ button:focus-visible, input:focus-visible, th button:focus-visible { outline: 2p
 .bar .tr { height: 14px; background: var(--grid); border-radius: 0 4px 4px 0; position: relative; }
 .bar .fl { position: absolute; inset: 0 auto 0 0; background: var(--s1); border-radius: 0 4px 4px 0; }
 .bar .vl { font-family: var(--font-num); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
-.bar:hover .nm, .bar:focus-visible .nm { font-weight: 700; }
+@media (hover: hover) { .bar:hover .nm { font-weight: 700; } }
+.bar:focus-visible .nm { font-weight: 700; }
 .bar:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
 
 /* 散布圖 */
@@ -106,14 +107,15 @@ th button { font: inherit; color: inherit; background: none; border: 0; padding:
 th[aria-sort="ascending"] button::after { content: " ▲"; }
 th[aria-sort="descending"] button::after { content: " ▼"; }
 td.num { font-size: 13px; }
-tbody tr:hover { background: var(--bg); }
+/* 只有滑鼠才有 hover 底色；手機點過的列不會一直留著深色 */
+@media (hover: hover) { tbody tr:hover { background: var(--bg); } }
 tbody tr:last-child td { border-bottom: 0; }
 /* 表格往左滑時，代號和名稱固定在左邊，才知道右邊的數字是哪一檔 */
 table.freeze th:nth-child(-n+2), table.freeze td:nth-child(-n+2) { position: sticky; z-index: 1; background: var(--surface); }
 table.freeze th:nth-child(-n+2) { background: var(--bg); z-index: 3; }
 table.freeze th:first-child, table.freeze td:first-child { left: 0; width: 64px; min-width: 64px; max-width: 64px; }
 table.freeze th:nth-child(2), table.freeze td:nth-child(2) { left: 64px; box-shadow: inset -1px 0 0 var(--line); }
-table.freeze tbody tr:hover td:nth-child(-n+2) { background: var(--bg); }
+@media (hover: hover) { table.freeze tbody tr:hover td:nth-child(-n+2) { background: var(--bg); } }
 .tag { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--grid); color: var(--ink-2); }
 .cross { color: var(--s2); font-weight: 700; }
 .bdg { display: inline-block; font-size: 11px; line-height: 1.5; padding: 0 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap; vertical-align: 1px; font-weight: 500; }
