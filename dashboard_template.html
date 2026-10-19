@@ -186,7 +186,10 @@ input[type="search"] { font: inherit; font-size: 13px; background: var(--surface
 .itag { font: inherit; font-size: 11px; border: 0; cursor: pointer; }
 .thtag { font: inherit; font-size: 11px; border: 0; cursor: pointer; background: var(--s1-soft); color: var(--s1); border-radius: 4px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
 .ind-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
-#dayTable th:nth-child(4), #dayTable td:nth-child(4) { text-align: left; }
+/* 市場圖例：市＝上市（實心）、櫃＝上櫃（空心） */
+.mk { display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 4px; font-size: 11px; line-height: 1; margin-right: 6px; vertical-align: 1px; font-weight: 500; flex: none; }
+.mk.l { background: var(--ink-3); color: var(--surface); }
+.mk.o { border: 1px solid var(--ink-3); color: var(--ink-2); }
 /* 展示版：最近幾天上鎖。名單是假的文字再模糊處理，真的名單不在頁面裡 */
 .lock-wrap { position: relative; overflow: hidden; }
 .lock-list { filter: blur(5px); user-select: none; pointer-events: none; }
@@ -295,7 +298,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
     <div class="ind-filter" id="indFilter" hidden></div>
-    <p class="tbl-hint"><span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
+    <p class="tbl-hint"><span class="mk l">市</span>上市　<span class="mk o">櫃</span>上櫃　<span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
       <table class="freeze" id="dayTable">
         <thead><tr id="thead"></tr></thead>
@@ -342,7 +345,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <div class="seg" id="wkListSeg" role="group" aria-label="清單"></div>
       <input type="search" id="wq" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
-    <p class="tbl-hint">同一檔這週只列一次。上榜後漲跌＝從這週第一次上榜那天的收盤算到週末收盤。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
+    <p class="tbl-hint"><span class="mk l">市</span>上市　<span class="mk o">櫃</span>上櫃　同一檔這週只列一次。上榜後漲跌＝從這週第一次上榜那天的收盤算到週末收盤。每格是一個交易日：<span class="wd on">一</span> 顯著買超　<span class="wd st">一</span> 買方轉強　<span class="wd">一</span> 沒上榜　<span class="wd no">一</span> 休市或還沒到　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的明細</b></p>
     <div class="tbl-scroll">
       <table class="freeze">
         <thead><tr id="wHead"></tr></thead>
@@ -393,7 +396,7 @@ const DATA = __DATA__;
 const P = DATA.params;
 const INV = [["投信", "投信（投本比）"], ["三大法人", "三大法人"]];
 const COLS = [
-  ["c", "代號"], ["n", "名稱"], ["ind", "產業"], ["m", "市場"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
+  ["c", "代號"], ["n", "名稱"], ["ind", "產業"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
@@ -408,6 +411,7 @@ const MODE = { "三大法人": "靈敏", "投信": "穩健" };
 // 標記：連續上榜（2 天以上）、近 10 日新上榜、雙榜；short 用在排行長條（位置較窄）
 const badges = (r, short) => (r.s >= 2 ? `<span class="bdg hot">🔥${short ? "" : "連"}${r.s}</span>` : "")
   + (r.w ? `<span class="bdg new">新</span>` : "") + (r.b ? `<span class="bdg both">⭐${short ? "" : "雙榜"}</span>` : "");
+const mk = m => m === "上櫃" ? '<span class="mk o" title="上櫃">櫃</span>' : '<span class="mk l" title="上市">市</span>';
 const pct = g => g === null || g === undefined ? "—" : `<span class="${g > 0 ? "up" : g < 0 ? "down" : ""}">${g > 0 ? "+" : ""}${g.toFixed(2)}%</span>`;
 const price = p => p ? (p >= 100 ? p.toFixed(1) : p.toFixed(2)) : "—";
 
@@ -518,7 +522,7 @@ const WEEKS = (() => {   // 新到舊；每週 ds 由舊到新、wd 是週一～
 const wkOf = () => WEEKS.find(w => w.k === state.week) || WEEKS[0];
 const mdS = ds => `${+ds.slice(4, 6)}/${+ds.slice(6)}`;
 // 手機上先看得到「本週每天」，所以排在名稱後面；市場放最後
-const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["ind", "產業"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "上榜後漲跌%"], ["p", "最新收盤"], ["m", "市場"]];
+const W_COLS = [["c", "代號"], ["n", "名稱"], ["days", "本週每天"], ["d", "上榜天數"], ["ind", "產業"], ["f", "最強力度"], ["wn", "本週法人買賣超(張)"], ["wg", "上榜後漲跌%"], ["p", "最新收盤"]];
 
 function weekAgg(w, inv) {
   const agg = new Map();
@@ -619,8 +623,8 @@ function renderWeekTable(w, picks, strong) {
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
   const later = SER ? "—" : "…";
-  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span>${a.th.map(t => `<span class="thtag" style="cursor:default">${t}</span>`).join("")}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
-    : `<tr><td colspan="10" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${mk(a.m)}${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span>${a.th.map(t => `<span class="thtag" style="cursor:default">${t}</span>`).join("")}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td></tr>`).join("")
+    : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
   $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
 }
@@ -712,7 +716,7 @@ function renderTable(e) {
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}${(r.th || []).map(t => `<button type="button" class="thtag" data-th="${t}" title="只看題材：${t}">${t}</button>`).join("")}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="12" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${mk(r.m)}${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}${(r.th || []).map(t => `<button type="button" class="thtag" data-th="${t}" title="只看題材：${t}">${t}</button>`).join("")}</td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 // 產業分布：依目前的清單（顯著買超／買方轉強）統計官方產業或題材；點一個 → 完整清單只看那個
 const IND_TOP = 8;
