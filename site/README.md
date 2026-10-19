@@ -11,7 +11,7 @@ Skool 付費會員專屬的籌碼力度頁面。網址：`https://chip-force-sit
 6. 忘記密碼：到 `/forgot`。沒有寄信網域時，會員輸入 email＋綁定的 Skool 帳號＋本月驗證碼就能直接設定新密碼（每個帳號一天一次、同一 email 15 分鐘內錯 5 次就鎖、每次重設都寄通知信給管理者、重設後所有裝置登出）；驗證碼是付費會員共用的，所以理論上知道別人 email 與 Skool 帳號的會員可以重設別人密碼，收到通知信時留意。管理者也可以在 `/admin` 按「重設密碼連結」給會員（24 小時內有效、只能用一次）。設定 `SITE_MAIL_FROM`（Resend 已驗證網域）後，自動改成寄信重設（連結 1 小時內有效）。
 7. 使用說明：`/guide`，未登入也看得到；登入頁、註冊頁、驗證頁和選股頁上方都有連結。
 8. 法律頁面（公開）：`/terms` 服務條款、`/privacy` 隱私權政策、`/refund` 退款規則，內容在 `site/legal.js`（律師審閱後直接改那個檔案；條款內容有變時，`TERMS_VERSION` 也要改）。註冊時必須勾選同意，帳號會記錄同意的版本（`user:` 的 `agreed`）。
-9. 展示版 `/demo`（公開、不用登入）：`build_dashboard.py` 用延遲 20 個交易日的 10 天資料產生 `output/demo.html`、`demo_series.json`，`upload.sh` 上傳到 KV `demo`、`demo_series`。上方有「加入雷達席」按鈕（`wrangler.toml` 的 `JOIN_URL`）。不想公開時把 `wrangler.toml` 的 `DEMO` 改成 `"off"` 再部署。
+9. 展示版 `/demo`（公開、不用登入）：`build_dashboard.py` 用延遲 20 個交易日的 10 天資料產生 `output/demo.html`、`demo_series.json`，`upload.sh` 上傳到 KV `demo`、`demo_series`。最近 5 個交易日顯示 🔒：只看得到檔數、連續上榜／新上榜／雙榜幾檔與前 5 大產業，名單區是模糊的假資料（真的名單不會送到展示版）。上方與解鎖按鈕連到付費方案（`wrangler.toml` 的 `JOIN_URL`）。不想公開時把 `wrangler.toml` 的 `DEMO` 改成 `"off"` 再部署。
 10. 自選追蹤與上榜通知：會員在個股明細按「☆ 追蹤」（KV `wl:<email>`，最多 50 檔），選股頁有「⭐ 我的追蹤」。按「🔔 開啟上榜通知」會註冊 `/sw.js` 並把瀏覽器的推播訂閱存到 `push:<email>`（每帳號最多 3 台裝置）；推播金鑰 `vapid` 在第一次有人開通知時由 Worker 產生。每日流程上傳頁面後執行 `notify.py`：追蹤的股票當天上榜（任一法人的顯著買超或買方轉強）就推播，只送給已開通且本月已驗證的會員，同一個交易日只送一次（KV `notified`）。iPhone 要 iOS 16.4 以上、加入主畫面後從主畫面打開才能開通知。要確認某位會員收得到，手動執行 Actions 的「測試上榜通知」並填他的 email。
 
 ## Skool 課程網址

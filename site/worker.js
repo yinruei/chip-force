@@ -268,7 +268,7 @@ function registerPage(env, err = "", email = "", handle = "") {
     <label for="password2">再輸入一次本站密碼</label><input id="password2" name="password2" type="password" autocomplete="new-password" minlength="8" required>
     <label for="code">本月驗證碼</label><input id="code" name="code" autocomplete="off" required>
     <label style="display:flex;gap:8px;align-items:flex-start;color:var(--ink-2);font-size:14px;margin-top:16px"><input type="checkbox" name="agree" value="1" required style="width:auto;margin-top:4px">
-      <span>我已閱讀並同意<a href="/terms" target="_blank">服務條款</a>、<a href="/privacy" target="_blank">隱私權政策</a>與<a href="/refund" target="_blank">退款規則</a>，也了解本站內容不是投資建議。</span></label>
+      <span>我已閱讀並同意<a href="/terms" target="_blank">服務條款</a>、<a href="/privacy" target="_blank">隱私權政策</a>與<a href="/refund" target="_blank">退款規則</a>；了解本站內容不是投資建議，且本服務為數位內容，同意立即開始提供、不適用 7 天解除權，付款後不退費。</span></label>
     <button class="full" type="submit">送出註冊</button>
   </form>
   <p class="small" style="margin-top:16px">已經有帳號？<a href="/login">登入</a>・<a href="/guide">使用說明</a></p>${DISCLAIMER}`);
@@ -527,13 +527,13 @@ const joinUrl = (env) => env.JOIN_URL || "https://www.skool.com/fosi-trading-119
 async function serveDemo(env) {
   const html = env.DEMO === "off" ? null : await env.SITE_KV.get("demo");
   if (!html) return page("展示版", `<h1>展示版暫停中</h1><p>想看完整內容，請加入 Skool 付費會員。</p><p><a href="${esc(joinUrl(env))}" target="_blank" rel="noopener">加入雷達席</a>・<a href="/login">會員登入</a></p>`, { status: 404 });
-  const m = html.match(/"demo":\{"until":"(\d{8})"\}/);
+  const m = html.match(/"demo":\{"until":"(\d{8})"/);
   const until = m ? `${+m[1].slice(4, 6)}/${+m[1].slice(6)}` : "約一個月前";
   const bar = `<div style="font:14px/1.5 system-ui,sans-serif;background:#0b1d44;color:#fff;padding:10px 16px;display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:center;text-align:center">
-    <span><b>展示版</b>・資料停在 ${until}（約一個月前）。付費會員每個交易日 17:30 看到最新資料，還能追蹤個股、收到通知。</span>
+    <span><b>展示版</b>・${until} 以前的資料完整開放；最近的交易日（🔒）只看得到檔數與產業。付費會員每個交易日 17:30 看到最新完整名單，還能追蹤個股、收到通知。</span>
     <a href="${esc(joinUrl(env))}" target="_blank" rel="noopener" style="background:#fff;color:#0b1d44;border-radius:999px;padding:4px 14px;font-weight:600;text-decoration:none">加入雷達席</a>
     <a href="/login" style="color:#cfe0ff">會員登入</a><a href="/guide" style="color:#cfe0ff">使用說明</a></div>`;
-  return dashboardDoc(html, bar);
+  return dashboardDoc(html.replaceAll("__JOIN_URL__", joinUrl(env).replace(/[^\w:/.?=&%#@~+-]/g, "")), bar);
 }
 
 function dashboardDoc(html, bar) {

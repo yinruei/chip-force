@@ -169,6 +169,15 @@ body.noscroll { overflow: hidden; }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
 .empty { padding: 24px; text-align: center; color: var(--ink-3); }
+/* 展示版：最近幾天上鎖。名單是假的文字再模糊處理，真的名單不在頁面裡 */
+.lock-wrap { position: relative; overflow: hidden; }
+.lock-list { filter: blur(5px); user-select: none; pointer-events: none; }
+.lock-row { display: grid; grid-template-columns: 4em 1fr 4em 4em; gap: 10px; padding: 8px 4px; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.lock-cta { position: absolute; inset: 56px 12px 12px; display: grid; place-items: center; text-align: center; }
+.lock-cta > div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; box-shadow: 0 6px 24px rgb(0 0 0 / .12); max-width: 360px; }
+.lock-cta b { font-size: 17px; display: block; margin-bottom: 6px; }
+.lock-cta p { margin: 0 0 12px; font-size: 13px; color: var(--ink-2); }
+.lock-cta a.go { display: inline-block; background: var(--ink); color: var(--bg); border-radius: 999px; padding: 8px 18px; font-weight: 500; text-decoration: none; }
 /* 本週統整：每天一格 */
 .wdays { display: inline-flex; gap: 3px; vertical-align: middle; }
 .wd { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 4px; font-size: 11px; line-height: 1; border: 1px solid var(--line); color: var(--ink-3); }
@@ -270,6 +279,29 @@ footer { font-size: 12px; color: var(--ink-3); }
   </section>
   </div>
 
+  <div id="viewLock" class="view" hidden>
+  <div class="cond" id="lkCond"></div>
+  <section class="kpis" aria-label="摘要">
+    <div class="kpi hero"><div class="k">力度最強</div><div class="v">🔒</div><div class="sub">加入雷達席才看得到是哪一檔</div></div>
+    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s1)"></span>顯著買超</div><div class="v" id="lkN">0</div><div class="sub" id="lkNSub"></div></div>
+    <div class="kpi"><div class="k"><span class="dot" style="background:var(--s2)"></span>買方轉強</div><div class="v" id="lkS">0</div><div class="sub">短期買盤轉強，尚未達顯著門檻</div></div>
+    <div class="kpi"><div class="k">最集中的產業</div><div class="v" id="lkTop" style="font-size:22px">—</div><div class="sub" id="lkTopSub"></div></div>
+  </section>
+  <section class="panels">
+    <div class="panel">
+      <h2>集中在哪些產業</h2>
+      <p class="hint">顯著買超的股票依產業分類（前 5 名）。</p>
+      <div class="bars" id="lkInd"></div>
+    </div>
+    <div class="panel lock-wrap">
+      <h2>完整清單</h2>
+      <p class="hint">代號、名稱、力度與個股明細只開放付費會員。</p>
+      <div class="lock-list" id="lkList" aria-hidden="true"></div>
+      <div class="lock-cta"><div><b id="lkCtaT"></b><p>加入雷達席，每個交易日 17:30 看到最新完整清單，還有個股明細、本週統整、追蹤與上榜通知。</p><a class="go" id="lkGo" target="_blank" rel="noopener">加入雷達席解鎖</a><p style="margin:10px 0 0" class="hint">想先看實際內容？點上方沒有 🔒 的日期。</p></div></div>
+    </div>
+  </section>
+  </div>
+
   <div id="viewWeek" class="view" hidden>
   <div class="cond" id="wkCond"></div>
   <section class="kpis" aria-label="本週摘要">
@@ -362,6 +394,31 @@ function seg(el, items, key, onPick) {
   });
 }
 const cur = () => DATA.dates[state.date][state.inv];
+// 展示版裡「上鎖」的日子：只有檔數與產業統計，沒有名單
+const isLocked = ds => !!(DATA.dates[ds] && DATA.dates[ds].locked);
+function renderLocked() {
+  const e = cur();
+  $("subtitle").textContent = `${dlong(state.date)} 收盤後的最新資料，付費會員才看得到完整名單。`;
+  $("lkCond").innerHTML = [`${INV.find(i => i[0] === state.inv)[1]}`, "🔒 最新資料只開放付費會員", "沒有 🔒 的日期可以看完整內容"].map(t => `<span>${t}</span>`).join("");
+  $("lkN").textContent = e.n;
+  $("lkNSub").innerHTML = `上市 ${e.n - e.otc}・上櫃 ${e.otc}<br>連續上榜 ${e.hot}・新上榜 ${e.new}・雙榜 ${e.both}`;
+  $("lkS").textContent = e.ns;
+  $("lkTop").textContent = e.ind.length ? e.ind[0][0] : "—";
+  $("lkTopSub").textContent = e.ind.length ? `${e.ind[0][1]} 檔顯著買超` : "今天沒有顯著買超";
+  const mx = Math.max(1, ...e.ind.map(x => x[1]));
+  $("lkInd").innerHTML = e.ind.length ? e.ind.map(([k, v]) => `<div class="bar"><div class="nm">${k}</div><div class="tr"><div class="fl" style="width:${(v / mx * 100).toFixed(1)}%"></div></div><div class="vl">${v} 檔</div></div>`).join("") : '<div class="empty">今天沒有顯著買超</div>';
+  // 假的文字（只是讓模糊後看起來像一份清單）
+  const fake = "台聯華光電國新興亞泰中友立達鴻碩群創宏晶";
+  let seed = +state.date.slice(4) + (state.inv === "投信" ? 7 : 3);
+  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
+  const rows = Array.from({ length: Math.max(6, Math.min(12, e.n)) }, () => {
+    const nm = Array.from({ length: 2 + Math.floor(rnd() * 2) }, () => fake[Math.floor(rnd() * fake.length)]).join("");
+    return `<div class="lock-row"><span class="num">${1000 + Math.floor(rnd() * 8999)}</span><span>${nm}</span><span class="num">${(2 + rnd() * 6).toFixed(2)}</span><span class="num">${fmt(Math.floor(rnd() * 9000) + 300)}</span></div>`;
+  });
+  $("lkList").innerHTML = rows.join("");
+  $("lkCtaT").textContent = e.n ? `這 ${e.n} 檔是哪些？` : "每天都有新的名單";
+  $("lkGo").href = (DATA.demo && DATA.demo.join) || "#";
+}
 
 /* 交易日：預設只顯示最近 10 天，按「更早」每次再多展開 10 天 */
 function renderDates() {
@@ -371,7 +428,7 @@ function renderDates() {
   state.shown = Math.max(state.shown, Math.ceil((dates.indexOf(state.date) + 1) / SHOW_STEP) * SHOW_STEP);
   dates.slice(0, state.shown).forEach(d => {
     const b = document.createElement("button");
-    b.type = "button"; b.textContent = dlabel(d); b.setAttribute("aria-pressed", String(state.date === d));
+    b.type = "button"; b.textContent = (isLocked(d) ? "🔒 " : "") + dlabel(d); b.setAttribute("aria-pressed", String(state.date === d));
     b.onclick = () => { state.date = d; render(); };
     box.appendChild(b);
   });
@@ -383,7 +440,9 @@ function renderDates() {
 
 function render() {
   seg($("viewSeg"), [["pick", "每日選股"], ["week", "本週統整"]].concat(BT ? [["bt", "回測"]] : []), "view", render);
-  $("viewPick").hidden = state.view !== "pick";
+  const lockedDay = state.view === "pick" && isLocked(state.date);
+  $("viewPick").hidden = state.view !== "pick" || lockedDay;
+  $("viewLock").hidden = !lockedDay;
   $("viewWeek").hidden = state.view !== "week";
   $("viewBt").hidden = state.view !== "bt";
   $("dateWrap").hidden = state.view !== "pick";
@@ -392,6 +451,7 @@ function render() {
   renderDates();
   seg($("invSeg"), INV, "inv", render);
   if (state.view === "week") { renderWeek(); return; }
+  if (lockedDay) { renderLocked(); return; }
   if (state.view === "bt") { $("subtitle").textContent = "把每天的訊號買進、持有幾天後賣出，和同一天全市場的平均比較。這是歷史統計，不代表未來。"; renderBt(); return; }
   const e = cur();
   $("subtitle").textContent = `${dlong(state.date)} 收盤後，全市場上市櫃普通股。找出法人買超力道明顯異常的股票。`;
@@ -419,7 +479,7 @@ const ymd = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}
 const toDate = ds => new Date(+ds.slice(0, 4), +ds.slice(4, 6) - 1, +ds.slice(6));
 const WEEKS = (() => {   // 新到舊；每週 ds 由舊到新、wd 是週一～週五
   const m = new Map();
-  dates.slice().reverse().forEach(ds => {
+  dates.slice().reverse().filter(ds => !isLocked(ds)).forEach(ds => {
     const d = toDate(ds); d.setDate(d.getDate() - (d.getDay() + 6) % 7);
     const k = ymd(d);
     if (!m.has(k)) m.set(k, { k, ds: [], wd: [0, 1, 2, 3, 4].map(i => { const x = new Date(d); x.setDate(d.getDate() + i); return ymd(x); }) });
@@ -552,6 +612,7 @@ const kbFocus = el => { try { return el.matches(":focus-visible"); } catch (e) {
 const tipHtml = r => `<b>${r.c} ${r.n}</b>（${r.m}）${r.s >= 2 ? `・連續 ${r.s} 日上榜` : ""}${r.w ? "・新上榜" : ""}${r.b ? "・雙榜" : ""}<br><span class="num">收盤 ${price(r.p)}（${r.g === null || r.g === undefined ? "—" : (r.g > 0 ? "+" : "") + r.g.toFixed(2) + "%"}）<br>力度 ${r.f.toFixed(2)}・佔股本比 ${r.r}%<br>法人 ${fmt(r.net)} 張・成交 ${fmt(r.v)} 張</span>`;
 
 function renderBars(e) {
+  if (!e || !e.picks) return;   // 展示版上鎖的日子沒有名單
   const box = $("bars"); box.innerHTML = "";
   const rows = e.picks.slice(0, 15);
   if (!rows.length) { box.innerHTML = '<div class="empty">今天沒有顯著買超</div>'; return; }
@@ -567,6 +628,7 @@ function renderBars(e) {
 }
 
 function renderScatter(e) {
+  if (!e || !e.picks) return;   // 展示版上鎖的日子沒有名單
   const svg = $("scatter"), W = Math.max(280, svg.parentElement.clientWidth - 2), H = 340;
   const m = { l: 40, r: 12, t: 10, b: 38 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
@@ -606,6 +668,7 @@ function renderScatter(e) {
 
 const numOr = v => (v === null || v === undefined || v === "" ? -1e9 : +v);
 function renderTable(e) {
+  if (!e || !e.picks) return;   // 展示版上鎖的日子沒有名單
   seg($("listSeg"), [["picks", `顯著買超 ${e.picks.length}`], ["strong", `買方轉強 ${e.strong.length}`]], "list", () => renderTable(cur()));
   const head = $("thead"); head.innerHTML = "";
   COLS.forEach(([k, label]) => {
@@ -702,7 +765,7 @@ const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credent
 const SKEY = { "三大法人": ["i", "fi"], "投信": ["t", "ft"] };
 const det = { code: null, name: "", m: "", inv: null, last: null };
 // 某天在某法人清單的狀態：1 顯著買超、2 買方轉強、0 沒上榜
-const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : 0; };
+const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e || !e.picks) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : 0; };
 const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
 const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
 

@@ -23,6 +23,7 @@ MODES = {"三大法人": "靈敏", "投信": "穩健"}
 # 展示版（/demo，不用登入）：用延遲的舊資料讓非會員看介面；付費會員才看得到最新的
 DEMO_LAG = 20    # 至少延遲幾個交易日（約一個月）
 DEMO_DAYS = 10   # 顯示幾個交易日（兩週，「本週統整」才看得出效果）
+DEMO_LOCKED = 5  # 最近幾個交易日「上鎖」：只給檔數與產業分布，股票名單在頁面上模糊處理（真的名單不放進展示版）
 
 
 def row(r: dict, close: dict, prev: dict) -> dict:
@@ -165,6 +166,19 @@ def main() -> None:
     build_demo(out, ser, html_tpl=(HERE / "dashboard_template.html").read_text(encoding="utf-8"))
 
 
+def locked_summary(e: dict, ind: dict[str, str]) -> dict:
+    """上鎖的日子只留統計數字：檔數、連續上榜／新上榜／雙榜幾檔、前 5 大產業。不含任何代號、名稱、價格。"""
+    picks = e["picks"]
+    cnt: dict[str, int] = {}
+    for r in picks:
+        k = ind.get(r["c"], "其他")
+        cnt[k] = cnt.get(k, 0) + 1
+    return {"n": len(picks), "ns": len(e["strong"]), "hot": sum(1 for r in picks if r.get("s", 0) >= 2),
+            "new": sum(1 for r in picks if r.get("w")), "both": sum(1 for r in picks if r.get("b")),
+            "otc": sum(1 for r in picks if r["m"] == "上櫃"),
+            "ind": sorted(cnt.items(), key=lambda x: -x[1])[:5]}
+
+
 def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
     """展示版：取 DEMO_LAG 個交易日以前的 DEMO_DAYS 天，個股明細也只到那一天。"""
     ds_all = sorted(out["dates"])
@@ -177,16 +191,22 @@ def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
         print("資料天數不夠，略過展示版")
         return
     end = keep[-1]
-    demo = {"params": out["params"], "dates": {d: out["dates"][d] for d in keep}, "demo": {"until": end}}
-    codes = {r["c"] for e in demo["dates"].values() for inv in e for lst in ("picks", "strong") for r in e[inv][lst]}
+    demo = {"params": out["params"], "dates": {d: out["dates"][d] for d in keep}, "demo": {"until": end, "join": "__JOIN_URL__"}}
+    import industry   # 只在產生展示版時才需要
+    ind = industry.load()
+    for d in ds_all[-DEMO_LOCKED:]:
+        if d > end:
+            demo["dates"][d] = {"locked": True, **{inv: locked_summary(out["dates"][d][inv], ind) for inv in MODES}}
+    codes = {r["c"] for d in keep for e in [out["dates"][d]] for inv in MODES for lst in ("picks", "strong") for r in e[inv][lst]}
     n = ser["d"].index(end) + 1 if end in ser["d"] else 0
     dser = {"d": ser["d"][:n], "s": {k: {f: v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}
-    note = f"展示版：資料停在 {end[:4]}-{end[4:6]}-{end[6:]}；付費會員每個交易日 17:30 看到最新資料"
+    note = f"展示版：{end[:4]}-{end[4:6]}-{end[6:]} 以前的資料完整開放，最近的交易日只顯示檔數與產業；付費會員每個交易日 17:30 看到最新完整名單"
     html = html_tpl.replace("資料更新於 __UPDATED__（台北時間）", note)
     html = html.replace("__DATA__", json.dumps(demo, ensure_ascii=False, separators=(",", ":")))
     (c.OUT / "demo.html").write_text(html, encoding="utf-8")
     (c.OUT / "demo_series.json").write_text(json.dumps(dser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"demo.html：{keep[0]} ～ {end}，明細 {len(dser['s'])} 檔")
+    locked = sorted(d for d in demo["dates"] if d > end)
+    print(f"demo.html：{keep[0]} ～ {end}，明細 {len(dser['s'])} 檔；上鎖 {', '.join(locked)}")
 
 
 if __name__ == "__main__":
