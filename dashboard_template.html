@@ -184,6 +184,8 @@ input[type="search"] { font: inherit; font-size: 13px; background: var(--surface
 .ind-filter { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13px; color: var(--ink-2); }
 .ind-filter button { font: inherit; font-size: 12.5px; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
 .itag { font: inherit; font-size: 11px; border: 0; cursor: pointer; }
+.thtag { font: inherit; font-size: 11px; border: 0; cursor: pointer; background: var(--s1-soft); color: var(--s1); border-radius: 4px; padding: 0 6px; margin-left: 4px; white-space: nowrap; }
+.ind-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
 #dayTable th:nth-child(4), #dayTable td:nth-child(4) { text-align: left; }
 /* 展示版：最近幾天上鎖。名單是假的文字再模糊處理，真的名單不在頁面裡 */
 .lock-wrap { position: relative; overflow: hidden; }
@@ -281,7 +283,7 @@ footer { font-size: 12px; color: var(--ink-3); }
   </section>
 
   <section class="panel" id="indPanel">
-    <h2>產業分布</h2>
+    <div class="ind-head"><h2 id="indTitle">產業分布</h2><div class="seg" id="indMode" role="group" aria-label="分類方式"></div></div>
     <p class="hint" id="indHint"></p>
     <div class="ind-grid" id="indBars"></div>
     <div id="indMoreBox"></div>
@@ -316,6 +318,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <h2>集中在哪些產業</h2>
       <p class="hint">顯著買超的股票依產業分類（前 5 名）。</p>
       <div class="bars" id="lkInd"></div>
+      <p class="hint" id="lkTh" style="margin:12px 0 0"></p>
     </div>
     <div class="panel lock-wrap">
       <h2>完整清單</h2>
@@ -394,7 +397,7 @@ const COLS = [
 ];
 const dates = Object.keys(DATA.dates).sort().reverse();
 const SHOW_STEP = 10;
-const state = { wshown: 6, week: null, wlist: "picks", wsort: ["d", -1], wq: "", shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", ind: "", indAll: false, h: 20 };
+const state = { wshown: 6, week: null, wlist: "picks", wsort: ["d", -1], wq: "", shown: SHOW_STEP, view: "pick", date: dates[0], inv: INV[0][0], list: "picks", sort: ["f", -1], q: "", ind: "", indKind: "ind", indMode: "ind", indAll: false, h: 20 };
 const BT = DATA.backtest || null;
 const $ = id => document.getElementById(id);
 const fmt = n => Number(n).toLocaleString("en-US");
@@ -430,6 +433,7 @@ function renderLocked() {
   $("lkTop").textContent = e.ind.length ? e.ind[0][0] : "—";
   $("lkTopSub").textContent = e.ind.length ? `${e.ind[0][1]} 檔顯著買超` : "今天沒有顯著買超";
   const mx = Math.max(1, ...e.ind.map(x => x[1]));
+  $("lkTh").innerHTML = e.th && e.th.length ? "熱門題材：" + e.th.map(([k, v]) => `<span class="thtag" style="cursor:default">${k} ${v}</span>`).join("") : "";
   $("lkInd").innerHTML = e.ind.length ? e.ind.map(([k, v]) => `<div class="bar"><div class="nm">${k}</div><div class="tr"><div class="fl" style="width:${(v / mx * 100).toFixed(1)}%"></div></div><div class="vl">${v} 檔</div></div>`).join("") : '<div class="empty">今天沒有顯著買超</div>';
   // 假的文字（只是讓模糊後看起來像一份清單）
   const fake = "台聯華光電國新興亞泰中友立達鴻碩群創宏晶";
@@ -522,7 +526,7 @@ function weekAgg(w, inv) {
     const e = DATA.dates[ds][inv];
     [["picks", 1], ["strong", 2]].forEach(([lst, v]) => e[lst].forEach(r => {
       let a = agg.get(r.c);
-      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, ind: r.ind || "", st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, pe: null, wn: null, first: {} });
+      if (!a) agg.set(r.c, a = { c: r.c, n: r.n, m: r.m, ind: r.ind || "", th: r.th || [], st: {}, dp: 0, ds: 0, fp: 0, fs: 0, b: false, last: ds, p: null, pe: null, wn: null, first: {} });
       a.st[ds] = a.st[ds] || v;
       if (!a.first[v]) a.first[v] = { ds, p: r.p };   // 這週第一次上榜（重複上榜以第一天為準）
       if (v === 1) { a.dp++; a.fp = Math.max(a.fp, r.f); if (r.b) a.b = true; } else { a.ds++; a.fs = Math.max(a.fs, r.f); }
@@ -615,7 +619,7 @@ function renderWeekTable(w, picks, strong) {
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
   const later = SER ? "—" : "…";
-  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span></td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
+  $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span>${a.th.map(t => `<span class="thtag" style="cursor:default">${t}</span>`).join("")}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td><td><span class="tag ${a.m === "上櫃" ? "mkt-otc" : ""}">${a.m}</span></td></tr>`).join("")
     : `<tr><td colspan="10" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
   $("wBody").onkeydown = ev => { if (ev.key === "Enter") $("wBody").onclick(ev); };
@@ -704,43 +708,57 @@ function renderTable(e) {
     th.appendChild(b); head.appendChild(th);
   });
   const q = state.q.trim().toLowerCase();
-  let rows = e[state.list].filter(r => (!q || r.c.includes(q) || r.n.toLowerCase().includes(q)) && (!state.ind || r.ind === state.ind));
+  let rows = e[state.list].filter(r => (!q || r.c.includes(q) || r.n.toLowerCase().includes(q)) && matchInd(r));
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="12" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}${(r.th || []).map(t => `<button type="button" class="thtag" data-th="${t}" title="只看題材：${t}">${t}</button>`).join("")}</td><td><span class="tag ${r.m === "上櫃" ? "mkt-otc" : ""}">${r.m}</span></td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="12" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
-// 產業分布：依目前的清單（顯著買超／買方轉強）統計；點一個產業 → 完整清單只看那個產業
+// 產業分布：依目前的清單（顯著買超／買方轉強）統計官方產業或題材；點一個 → 完整清單只看那個
 const IND_TOP = 8;
-function setInd(k) { state.ind = state.ind === k ? "" : k; renderTable(cur()); }
+const matchInd = r => !state.ind || (state.indKind === "th" ? (r.th || []).includes(state.ind) : r.ind === state.ind);
+function setInd(k, kind) {
+  kind = kind || state.indMode;
+  if (state.ind === k && state.indKind === kind) state.ind = "";
+  else { state.ind = k; state.indKind = kind; state.indMode = kind; }
+  renderTable(cur());
+}
 function renderInd(e) {
-  const list = e[state.list], cnt = {};
-  list.forEach(r => { const k = r.ind || "其他"; cnt[k] = (cnt[k] || 0) + 1; });
+  const list = e[state.list], th = state.indMode === "th", cnt = {};
+  list.forEach(r => (th ? (r.th || []) : [r.ind || "其他"]).forEach(k => { cnt[k] = (cnt[k] || 0) + 1; }));
   const items = Object.entries(cnt).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"));
-  if (state.ind && !cnt[state.ind]) state.ind = "";
+  if (state.ind && !list.some(matchInd)) state.ind = "";
+  const hasTh = list.some(r => r.th && r.th.length);
   $("indPanel").hidden = !list.length || !list.some(r => r.ind);
-  $("indHint").textContent = `${state.list === "picks" ? "顯著買超" : "買方轉強"}的 ${list.length} 檔依產業分類。點一個產業，下面的完整清單就只顯示那個產業。`;
+  seg($("indMode"), [["ind", "官方產業"], ["th", "題材"]], "indMode", () => { state.indAll = false; renderInd(cur()); });
+  $("indTitle").textContent = th ? "題材分布" : "產業分布";
+  const who = state.list === "picks" ? "顯著買超" : "買方轉強";
+  const tagged = list.filter(r => r.th && r.th.length).length;
+  $("indHint").textContent = th
+    ? (hasTh ? `${who}的 ${list.length} 檔裡，有 ${tagged} 檔屬於本站整理的題材（一檔可能有多個題材，題材不是官方分類）。點一個題材，下面的完整清單就只顯示那個題材。` : `${who}的股票今天都不在本站整理的題材裡。`)
+    : `${who}的 ${list.length} 檔依證交所官方產業別分類。點一個產業，下面的完整清單就只顯示那個產業。`;
   const mx = Math.max(1, ...items.map(x => x[1]));
   const show = state.indAll ? items : items.slice(0, IND_TOP);
   $("indBars").style.setProperty("--rows", Math.ceil(show.length / 2));
-  $("indBars").innerHTML = show.map(([k, v]) => `<button type="button" class="ibar" data-ind="${k}" aria-pressed="${state.ind === k}"><span class="nm">${k}</span><span class="tr"><span class="fl" style="width:${(v / mx * 100).toFixed(1)}%;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></span><span class="vl">${v} 檔</span></button>`).join("");
-  $("indMoreBox").innerHTML = items.length > IND_TOP ? `<button type="button" class="ind-more" id="indMore">${state.indAll ? "收合 ▴" : `顯示全部 ${items.length} 個產業 ▾`}</button>` : "";
-  const f = $("indFilter");
+  $("indBars").innerHTML = show.map(([k, v]) => `<button type="button" class="ibar" data-ind="${k}" aria-pressed="${state.ind === k && state.indKind === state.indMode}"><span class="nm">${k}</span><span class="tr"><span class="fl" style="width:${(v / mx * 100).toFixed(1)}%;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></span><span class="vl">${v} 檔</span></button>`).join("");
+  $("indMoreBox").innerHTML = items.length > IND_TOP ? `<button type="button" class="ind-more" id="indMore">${state.indAll ? "收合 ▴" : `顯示全部 ${items.length} 個${th ? "題材" : "產業"} ▾`}</button>` : "";
+  const f = $("indFilter"), n = list.filter(matchInd).length;
   f.hidden = !state.ind;
-  f.innerHTML = state.ind ? `<span>只看「<b>${state.ind}</b>」${cnt[state.ind]} 檔</span><button type="button" id="indClear">✕ 顯示全部</button>` : "";
+  f.innerHTML = state.ind ? `<span>只看${state.indKind === "th" ? "題材" : ""}「<b>${state.ind}</b>」${n} 檔</span><button type="button" id="indClear">✕ 顯示全部</button>` : "";
 }
 $("indPanel").onclick = ev => {
   if (ev.target.closest("#indMore")) { state.indAll = !state.indAll; renderInd(cur()); return; }
   const b = ev.target.closest(".ibar");
   if (!b) return;
-  setInd(b.dataset.ind);
+  setInd(b.dataset.ind, state.indMode);
   if (state.ind) $("tablePanel").scrollIntoView({ behavior: "smooth", block: "start" });
 };
-$("indFilter").onclick = ev => { if (ev.target.closest("#indClear")) setInd(state.ind); };
+$("indFilter").onclick = ev => { if (ev.target.closest("#indClear")) { state.ind = ""; renderTable(cur()); } };
 const rowOf = tr => tr && cur()[state.list].find(r => r.c === tr.dataset.c);
 $("tbody").onclick = ev => {
-  const t = ev.target.closest(".itag");
-  if (t) { setInd(t.dataset.ind); return; }   // 點產業標籤 → 篩選，不開明細
+  const t = ev.target.closest(".itag"), h = ev.target.closest(".thtag");
+  if (t) { setInd(t.dataset.ind, "ind"); return; }   // 點產業／題材標籤 → 篩選，不開明細
+  if (h) { setInd(h.dataset.th, "th"); return; }
   const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r);
 };
 $("tbody").onkeydown = ev => { if (ev.key === "Enter") { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); } };
@@ -832,8 +850,15 @@ const indOf = c => {
   }
   return "";
 };
+const thOf = c => {
+  for (const ds of dates) for (const inv of ["投信", "三大法人"]) {
+    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
+    if (r) return r.th || [];
+  }
+  return [];
+};
 function openDetail(r, ds) {
-  Object.assign(det, { code: r.c, name: r.n, m: r.m, ind: r.ind || indOf(r.c), inv: state.inv, date: ds || state.date, last: document.activeElement });
+  Object.assign(det, { code: r.c, name: r.n, m: r.m, ind: r.ind || indOf(r.c), th: r.th || thOf(r.c), inv: state.inv, date: ds || state.date, last: document.activeElement });
   hideTip();
   $("dlg").hidden = false; document.body.classList.add("noscroll");
   $("dlgClose").focus();
@@ -852,7 +877,7 @@ function renderDetail() {
   const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
   $("dlgTitle").textContent = `${det.code} ${det.name}`;
   paintStar();
-  $("dlgSub").innerHTML = `${det.m}${det.ind ? "・" + det.ind : ""}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
+  $("dlgSub").innerHTML = `${det.m}${det.ind ? "・" + det.ind : ""}${det.th && det.th.length ? "・" + det.th.join("、") : ""}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
   const box = $("dlgInv"); box.innerHTML = "";
   INV.forEach(([val, label]) => {
     const b = document.createElement("button"); b.type = "button"; b.textContent = label; b.setAttribute("aria-pressed", String(det.inv === val));

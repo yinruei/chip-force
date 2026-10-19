@@ -38,13 +38,33 @@ def industry_of(code: str) -> str:
     return _IND.get(code, "")
 
 
+_THEMES: dict[str, list[str]] | None = None
+
+
+def themes_of(code: str) -> list[str]:
+    """題材標籤（本站自己整理的，不是官方分類）：data/themes.csv，每行一個題材、代號用空白隔開；一檔可以有多個題材。"""
+    global _THEMES
+    if _THEMES is None:
+        _THEMES = {}
+        f = c.CACHE / "themes.csv"
+        if f.exists():
+            with f.open(encoding="utf-8") as fh:
+                for r in csv.DictReader(fh):
+                    t = (r.get("theme") or "").strip()
+                    for code_ in (r.get("codes") or "").split():
+                        if t and t not in _THEMES.setdefault(code_, []):
+                            _THEMES[code_].append(t)
+    return _THEMES.get(code, [])
+
+
 def row(r: dict, close: dict, prev: dict) -> dict:
     code = r["代號"]
     p, p0 = close.get(code), prev.get(code)
     return {"c": code, "n": r["名稱"], "m": r["市場"], "v": r["成交張數"], "net": r["法人買賣超(張)"],
             "r": r["佔股本比(%)"], "f": r["力度z"], "x": bool(r["買方轉強"]),
             # 收盤價與漲跌幅（和前一個交易日收盤比；除權息日會和官方漲跌不同）
-            "p": p, "g": round((p / p0 - 1) * 100, 2) if p and p0 else None, "ind": industry_of(code)}
+            "p": p, "g": round((p / p0 - 1) * 100, 2) if p and p0 else None, "ind": industry_of(code),
+            **({"th": themes_of(code)} if themes_of(code) else {})}
 
 
 def load_close(ds: str) -> dict[str, float]:
@@ -182,13 +202,16 @@ def locked_summary(e: dict) -> dict:
     """上鎖的日子只留統計數字：檔數、連續上榜／新上榜／雙榜幾檔、前 5 大產業。不含任何代號、名稱、價格。"""
     picks = e["picks"]
     cnt: dict[str, int] = {}
+    th: dict[str, int] = {}
     for r in picks:
         k = r.get("ind") or industry_of(r["c"]) or "其他"
         cnt[k] = cnt.get(k, 0) + 1
+        for t in r.get("th") or themes_of(r["c"]):
+            th[t] = th.get(t, 0) + 1
     return {"n": len(picks), "ns": len(e["strong"]), "hot": sum(1 for r in picks if r.get("s", 0) >= 2),
             "new": sum(1 for r in picks if r.get("w")), "both": sum(1 for r in picks if r.get("b")),
             "otc": sum(1 for r in picks if r["m"] == "上櫃"),
-            "ind": sorted(cnt.items(), key=lambda x: -x[1])[:5]}
+            "ind": sorted(cnt.items(), key=lambda x: -x[1])[:5], "th": sorted(th.items(), key=lambda x: -x[1])[:5]}
 
 
 def build_demo(out: dict, ser: dict, html_tpl: str) -> None:

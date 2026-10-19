@@ -8,6 +8,7 @@ on:
       - ".github/workflows/site.yml"
       - "dashboard_template.html"
       - "build_dashboard.py"
+      - "data/themes.csv"
   workflow_dispatch:
 
 concurrency:
