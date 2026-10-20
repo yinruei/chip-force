@@ -21,7 +21,7 @@ PAGE = HERE / "output" / "dashboard.html"
 SHOTS = HERE / "output" / "screenshots"
 KEEP = 30
 # 頁面上「看哪個法人」按鈕的文字 → 檔名
-INVESTORS = {"投信（投本比）": "投信", "外資": "外資"}
+INVESTORS = {"投信（投本比）": "投信", "外資（外本比）": "外資"}   # key＝頁面上「看哪個法人」按鈕的文字
 
 
 def latest_date(html: str) -> str:
