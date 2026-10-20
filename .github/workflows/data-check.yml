@@ -1,0 +1,40 @@
+name: 檢查資料來源欄位
+
+# 手動執行：印出證交所 T86、櫃買中心法人買賣超的欄位名稱與第一筆資料，用來檢查欄位對應有沒有跑掉。
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "日期 YYYY-MM-DD（空白＝最近一個交易日）"
+        required: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 櫃買中心法人買賣超欄位
+        env:
+          D: ${{ inputs.date }}
+        run: |
+          python - <<'PY'
+          import datetime as dt, json, os
+          import chip_force as c
+          d = dt.date.fromisoformat(os.environ["D"]) if os.environ.get("D") else dt.datetime.now(c.TZ).date()
+          for i in range(10):
+              day = d - dt.timedelta(days=i)
+              if day.weekday() >= 5: continue
+              js = c._get_json(f"https://www.tpex.org.tw/www/zh-tw/insti/dailyTrade?type=Daily&sect=EW&date={day:%Y/%m/%d}&response=json", retries=2)
+              t = (js or {}).get("tables") or []
+              if t and t[0].get("data"):
+                  print("日期", day, "tables", len(t))
+                  for k in t[0]:
+                      if k not in ("data",): print(k, "=", json.dumps(t[0][k], ensure_ascii=False)[:2000])
+                  print("第一筆:", json.dumps(t[0]["data"][0], ensure_ascii=False))
+                  print("fields 數", len(t[0]["fields"]), "第一筆欄數", len(t[0]["data"][0]))
+                  break
+          PY
