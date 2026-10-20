@@ -308,6 +308,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
     <div class="ind-filter" id="indFilter" hidden></div>
+    <p class="tbl-hint" id="listNote" hidden style="color:var(--ink-2)"><b style="font-weight:600">觀察名單</b>：力度也很高、當天是買超，但買的份量（佔股本比）比較小，常見於大型股。<b style="font-weight:600">不算正式訊號</b>，供參考。</p>
     <p class="tbl-hint"><span class="mk l">市</span>上市　<span class="mk o">櫃</span>上櫃　<span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和外資同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
       <table class="freeze" id="dayTable">
@@ -674,18 +675,18 @@ function renderScatter(e) {
   const svg = $("scatter"), W = Math.max(280, svg.parentElement.clientWidth - 2), H = 340;
   const m = { l: 40, r: 12, t: 10, b: 38 };
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("height", H);
-  const all = [...e.picks.map(r => ({ ...r, g: 0 })), ...e.strong.map(r => ({ ...r, g: 1 }))];
+  const all = [...e.picks.map(r => ({ ...r, g: 0 })), ...e.strong.map(r => ({ ...r, g: 1 })), ...(e.watch || []).map(r => ({ ...r, g: 2 }))];
   const legend = $("legend");
-  legend.innerHTML = `<span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--s1)"/></svg>顯著買超</span><span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--s2)"/></svg>買方轉強</span><span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/></svg>上市（圓）</span><span><svg viewBox="0 0 12 12"><path d="M6 0.5 11.5 6 6 11.5 0.5 6Z" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/></svg>上櫃（菱形）</span>`;
+  legend.innerHTML = `<span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--s1)"/></svg>顯著買超</span><span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--s2)"/></svg>買方轉強</span><span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="5" fill="var(--ink-3)" fill-opacity=".55"/></svg>觀察名單</span><span><svg viewBox="0 0 12 12"><circle cx="6" cy="6" r="4.5" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/></svg>上市（圓）</span><span><svg viewBox="0 0 12 12"><path d="M6 0.5 11.5 6 6 11.5 0.5 6Z" fill="none" stroke="var(--ink-2)" stroke-width="1.5"/></svg>上櫃（菱形）</span>`;
   if (!all.length) { svg.innerHTML = ""; return; }
   const rs = all.map(r => Math.max(r.r, 0.01));
   const lo = Math.pow(10, Math.floor(Math.log10(Math.min(...rs)))), hi = Math.pow(10, Math.ceil(Math.log10(Math.max(...rs))));
   // 縱軸上限看「一般的點」：顯著買超最高的力度或 9 成分位數；偶爾有冷門股力度好幾百，畫在上邊界並標 ↑ 實際數字
-  const fs = all.map(r => r.f).sort((a, b) => a - b);
+  const main = all.filter(r => r.g < 2), fs = (main.length ? main : all).map(r => r.f).sort((a, b) => a - b);   // 縱軸上限不看觀察名單
   const pf = e.picks.length ? Math.max(...e.picks.map(r => r.f)) : 0;
   const cap = Math.max(pf, fs[Math.floor((fs.length - 1) * 0.9)], P.k + 2) * 1.15;
   const fmin = Math.min(0, Math.floor(fs[0]));
-  const topV = Math.min(fs[fs.length - 1], cap);
+  const topV = Math.min(Math.max(fs[fs.length - 1], ...all.map(r => r.f)), cap);
   const niceStep = x => { const p = Math.pow(10, Math.floor(Math.log10(x))); return [1, 2, 5, 10].map(k => k * p).find(v => v >= x); };
   const step = niceStep(Math.max(topV - fmin, 1) / 5);
   const fmax = Math.max(Math.ceil(topV / step) * step, P.k + step);
@@ -698,19 +699,19 @@ function renderScatter(e) {
   s += `<text class="axt" x="${(m.l + W - m.r) / 2}" y="${H - 4}" text-anchor="middle" style="font-family:var(--font-ui)">佔股本比（對數刻度）</text>`;
   // 先畫買方轉強，再畫顯著買超在上層；超出上邊界的點，↑ 標籤往下排開避免重疊
   let nOver = 0;
-  [1, 0].forEach(g => all.filter(r => r.g === g).forEach((r, i) => {
-    const cx = X(r.r), cy = Y(r.f), col = g ? "var(--s2)" : "var(--s1)", id = `${g}-${i}`;
+  [2, 1, 0].forEach(g => all.filter(r => r.g === g).forEach((r, i) => {
+    const cx = X(r.r), cy = Y(r.f), col = g === 2 ? "var(--ink-3)" : g ? "var(--s2)" : "var(--s1)", op = g === 2 ? ".45" : ".85", id = `${g}-${i}`;
     const shape = r.m === "上櫃"
-      ? `<path d="M${cx} ${cy - 6.5}L${cx + 6.5} ${cy}L${cx} ${cy + 6.5}L${cx - 6.5} ${cy}Z" fill="${col}" fill-opacity=".85" stroke="var(--surface)" stroke-width="2"/>`
-      : `<circle cx="${cx}" cy="${cy}" r="5" fill="${col}" fill-opacity=".85" stroke="var(--surface)" stroke-width="2"/>`;
-    const over = r.f > fmax ? `<text class="lbl" x="${cx + 9}" y="${cy + 4 + 13 * nOver++}" style="font-family:var(--font-ui)">↑${r.f >= 100 ? r.f.toFixed(0) : r.f.toFixed(1)}</text>` : "";
+      ? `<path d="M${cx} ${cy - 6.5}L${cx + 6.5} ${cy}L${cx} ${cy + 6.5}L${cx - 6.5} ${cy}Z" fill="${col}" fill-opacity="${op}" stroke="var(--surface)" stroke-width="2"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="5" fill="${col}" fill-opacity="${op}" stroke="var(--surface)" stroke-width="2"/>`;
+    const over = r.f > fmax && g < 2 ? `<text class="lbl" x="${cx + 9}" y="${cy + 4 + 13 * nOver++}" style="font-family:var(--font-ui)">↑${r.f >= 100 ? r.f.toFixed(0) : r.f.toFixed(1)}</text>` : "";
     s += `<g class="pt" data-g="${g}" data-i="${i}" tabindex="0" style="outline:none">${shape}${over}<circle cx="${cx}" cy="${cy}" r="12" fill="transparent"/></g>`;
   }));
   // 標出力度最高的 3 檔
   e.picks.slice(0, 3).forEach(r => { s += `<text class="lbl" x="${X(r.r) + 9}" y="${Y(r.f) + 4}" style="font-family:var(--font-ui)">${r.n}</text>`; });
   svg.innerHTML = s;
   svg.querySelectorAll(".pt").forEach(g => {
-    const r = (g.dataset.g === "1" ? e.strong : e.picks)[+g.dataset.i];
+    const r = (g.dataset.g === "2" ? e.watch : g.dataset.g === "1" ? e.strong : e.picks)[+g.dataset.i];
     const ev = ev2 => { const b = g.getBoundingClientRect(); showTip(tipHtml(r), ev2.clientX || b.right, ev2.clientY || b.top); };
     g.onmousemove = ev; g.onfocus = e2 => kbFocus(g) && ev(e2); g.onmouseleave = hideTip; g.onblur = hideTip;
     g.onclick = () => openDetail(r); g.onkeydown = k => { if (k.key === "Enter") openDetail(r); };
@@ -720,7 +721,10 @@ function renderScatter(e) {
 const numOr = v => (v === null || v === undefined || v === "" ? -1e9 : +v);
 function renderTable(e) {
   if (!e || !e.picks) return;   // 展示版上鎖的日子沒有名單
-  seg($("listSeg"), [["picks", `顯著買超 ${e.picks.length}`], ["strong", `買方轉強 ${e.strong.length}`]], "list", () => renderTable(cur()));
+  if (!e.watch) e.watch = [];
+  if (!e[state.list]) state.list = "picks";
+  seg($("listSeg"), [["picks", `顯著買超 ${e.picks.length}`], ["watch", `觀察 ${e.watch.length}`], ["strong", `買方轉強 ${e.strong.length}`]], "list", () => renderTable(cur()));
+  $("listNote").hidden = state.list !== "watch";
   renderInd(e);
   const head = $("thead"); head.innerHTML = "";
   COLS.forEach(([k, label]) => {
@@ -735,7 +739,7 @@ function renderTable(e) {
   const [k, dir] = state.sort;
   rows = rows.slice().sort((a, b) => (typeof a[k] === "string" ? a[k].localeCompare(b[k], "zh-Hant") : (numOr(a[k]) - numOr(b[k]))) * dir);
   const fmax = Math.max(...e.picks.map(r => r.f), 1);
-  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${mk(r.m)}${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}${(r.th || []).map(t => `<button type="button" class="thtag" data-th="${t}" title="只看題材：${t}">${t}</button>`).join("")}</td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
+  $("tbody").innerHTML = rows.length ? rows.map(r => `<tr data-c="${r.c}" tabindex="0"><td class="num">${r.c}</td><td>${mk(r.m)}${r.n}${star(r.c)}${badges(r)}</td><td>${r.ind ? `<button type="button" class="tag itag" data-ind="${r.ind}" title="只看${r.ind}">${r.ind}</button>` : "—"}${(r.th || []).map(t => `<button type="button" class="thtag" data-th="${t}" title="只看題材：${t}">${t}</button>`).join("")}</td><td class="num">${price(r.p)}</td><td class="num">${pct(r.g)}</td><td class="num">${fmt(r.v)}</td><td class="num">${fmt(r.net)}</td><td class="num">${r.r.toFixed(4)}</td><td class="num">${r.f.toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, r.f / fmax * 60))}px;${state.list === "strong" ? "background:var(--s2)" : state.list === "watch" ? "background:var(--ink-3)" : ""}"></span></td><td class="num">${r.s ? r.s + " 日" : "—"}</td><td class="cross">${r.x ? "✓" : ""}</td></tr>`).join("") : `<tr><td colspan="11" class="empty">${state.q || state.ind ? "找不到符合的股票" : "今天這份清單是空的"}</td></tr>`;
 }
 // 產業分布：依目前的清單（顯著買超／買方轉強）統計官方產業或題材；點一個 → 完整清單只看那個
 const IND_TOP = 8;
@@ -747,7 +751,7 @@ function setInd(k, kind) {
   renderTable(cur());
 }
 function renderInd(e) {
-  const list = e[state.list], th = state.indMode === "th", cnt = {};
+  const list = e[state.list] || [], th = state.indMode === "th", cnt = {};
   list.forEach(r => (th ? (r.th || []) : [r.ind || "其他"]).forEach(k => { cnt[k] = (cnt[k] || 0) + 1; }));
   const items = Object.entries(cnt).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-Hant"));
   if (state.ind && !list.some(matchInd)) state.ind = "";
@@ -755,7 +759,7 @@ function renderInd(e) {
   $("indPanel").hidden = !list.length || !list.some(r => r.ind);
   seg($("indMode"), [["ind", "官方產業"], ["th", "題材"]], "indMode", () => { state.indAll = false; renderInd(cur()); });
   $("indTitle").textContent = th ? "題材分布" : "產業分布";
-  const who = state.list === "picks" ? "顯著買超" : "買方轉強";
+  const who = { picks: "顯著買超", watch: "觀察名單", strong: "買方轉強" }[state.list];
   const tagged = list.filter(r => r.th && r.th.length).length;
   $("indHint").textContent = th
     ? (hasTh ? `${who}的 ${list.length} 檔裡，有 ${tagged} 檔屬於本站整理的題材（一檔可能有多個題材，題材不是官方分類）。點一個題材，下面的完整清單就只顯示那個題材。` : `${who}的股票今天都不在本站整理的題材裡。`)
@@ -763,7 +767,7 @@ function renderInd(e) {
   const mx = Math.max(1, ...items.map(x => x[1]));
   const show = state.indAll ? items : items.slice(0, IND_TOP);
   $("indBars").style.setProperty("--rows", Math.ceil(show.length / 2));
-  $("indBars").innerHTML = show.map(([k, v]) => `<button type="button" class="ibar" data-ind="${k}" aria-pressed="${state.ind === k && state.indKind === state.indMode}"><span class="nm">${k}</span><span class="tr"><span class="fl" style="width:${(v / mx * 100).toFixed(1)}%;${state.list === "strong" ? "background:var(--s2)" : ""}"></span></span><span class="vl">${v} 檔</span></button>`).join("");
+  $("indBars").innerHTML = show.map(([k, v]) => `<button type="button" class="ibar" data-ind="${k}" aria-pressed="${state.ind === k && state.indKind === state.indMode}"><span class="nm">${k}</span><span class="tr"><span class="fl" style="width:${(v / mx * 100).toFixed(1)}%;${state.list === "strong" ? "background:var(--s2)" : state.list === "watch" ? "background:var(--ink-3)" : ""}"></span></span><span class="vl">${v} 檔</span></button>`).join("");
   $("indMoreBox").innerHTML = items.length > IND_TOP ? `<button type="button" class="ind-more" id="indMore">${state.indAll ? "收合 ▴" : `顯示全部 ${items.length} 個${th ? "題材" : "產業"} ▾`}</button>` : "";
   const f = $("indFilter"), n = list.filter(matchInd).length;
   f.hidden = !state.ind;
@@ -862,20 +866,20 @@ const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credent
 const SKEY = { "外資": ["i", "fi"], "投信": ["t", "ft"] };
 const det = { code: null, name: "", m: "", inv: null, last: null };
 // 某天在某法人清單的狀態：1 顯著買超、2 買方轉強、0 沒上榜
-const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e || !e.picks) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : 0; };
+const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e || !e.picks) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : (e.watch || []).some(r => r.c === code) ? 3 : 0; };
 const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
 const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
 
 const indOf = c => {
   for (const ds of dates) for (const inv of ["投信", "外資"]) {
-    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
+    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c) || (e.watch || []).find(x => x.c === c));
     if (r && r.ind) return r.ind;
   }
   return "";
 };
 const thOf = c => {
   for (const ds of dates) for (const inv of ["投信", "外資"]) {
-    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
+    const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c) || (e.watch || []).find(x => x.c === c));
     if (r) return r.th || [];
   }
   return [];
@@ -897,7 +901,7 @@ addEventListener("keydown", ev => { if (ev.key === "Escape" && !$("dlg").hidden)
 
 function renderDetail() {
   const e = DATA.dates[det.date] && DATA.dates[det.date][det.inv];
-  const row = e && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code));
+  const row = e && e.picks && (e.picks.find(r => r.c === det.code) || e.strong.find(r => r.c === det.code) || (e.watch || []).find(r => r.c === det.code));
   $("dlgTitle").textContent = `${det.code} ${det.name}`;
   paintStar();
   $("dlgSub").innerHTML = `${det.m}${det.ind ? "・" + det.ind : ""}${det.th && det.th.length ? "・" + det.th.join("、") : ""}・${dlong(det.date)}` + (row ? `・收盤 ${price(row.p)}（${pct(row.g)}）${badges(row)}` : "");
@@ -928,7 +932,7 @@ function renderDetail() {
       <div><div class="k">目前連續上榜</div><div class="v">${streak} 日</div></div>
       <div><div class="k">雙榜天數（60 日）</div><div class="v">${both} 天</div></div>
     </div>
-    <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
+    <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span><span class="lg"><i style="background:var(--ink-3)"></i>觀察日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
     <div class="dlg-chart"><h3>力度</h3><svg id="cF" role="img" aria-label="近 60 日力度折線圖"></svg></div>
     <div class="dlg-chart"><h3>收盤價</h3><svg id="cP" role="img" aria-label="近 60 日收盤價折線圖"></svg></div>
     <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。價格未還原除權息。</p>`;
@@ -964,7 +968,7 @@ function renderDetail() {
       s += `<path d="${d}" fill="${v > 0 ? "var(--up)" : "var(--down)"}"/>`;
     });
     s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-3)"/>`;
-    st.forEach((v, i) => { if (v) s += `<circle cx="${cx(i)}" cy="9" r="4" fill="${v === 1 ? "var(--s1)" : "var(--s2)"}" stroke="var(--surface)" stroke-width="1.5"/>`; });
+    st.forEach((v, i) => { if (v) s += `<circle cx="${cx(i)}" cy="9" r="4" fill="${v === 1 ? "var(--s1)" : v === 2 ? "var(--s2)" : "var(--ink-3)"}" stroke="var(--surface)" stroke-width="1.5"/>`; });
     finish(svg, s + xlabels(H, bot), H); }
 
   // 2) 力度：折線＋顯著門檻虛線
@@ -988,7 +992,7 @@ function renderDetail() {
     finish(svg, s + xlabels(H, bot), H); }
 
   // 十字線＋提示：三張圖同步
-  const LS = ["", "顯著買超", "買方轉強"];
+  const LS = ["", "顯著買超", "買方轉強", "觀察名單"];
   const show = ev => {
     const b = ev.currentTarget.ownerSVGElement.getBoundingClientRect(), px = (ev.clientX - b.left) * W / b.width;
     const i = Math.max(0, Math.min(N - 1, Math.floor((px - m.l) / step)));
@@ -1038,7 +1042,8 @@ function paintStar() {
   b.hidden = !WATCH.on; b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "★ 追蹤中" : "☆ 追蹤";
 }
 $("dlgStar").onclick = () => toggleWatch({ c: det.code, n: det.name, m: det.m });
-const lastListed = (c, upto) => dates.find(ds => ds <= upto && (listed(ds, "投信", c) || listed(ds, "外資", c))) || null;
+const isSig = v => v === 1 || v === 2;   // 正式訊號（觀察名單不算上榜）
+const lastListed = (c, upto) => dates.find(ds => ds <= upto && (isSig(listed(ds, "投信", c)) || isSig(listed(ds, "外資", c)))) || null;
 function renderWatch() {
   const box = $("watchPanel");
   box.hidden = !WATCH.on || state.view !== "pick";
@@ -1048,9 +1053,9 @@ function renderWatch() {
     $("wlBody").innerHTML = '<p class="watch-note">打開任一檔的個股明細，按右上角「☆ 追蹤」就會加到這裡。開啟上榜通知後，追蹤的股票上榜時，每個交易日收盤更新完會通知你。</p>';
     return;
   }
-  const chip = (inv, v) => `<span class="chip ${v === 1 ? "p1" : v === 2 ? "p2" : ""}">${inv === "投信" ? "投信" : "外資"} ${v === 1 ? "顯著" : v === 2 ? "轉強" : "—"}</span>`;
+  const chip = (inv, v) => `<span class="chip ${v === 1 ? "p1" : v === 2 ? "p2" : ""}">${inv === "投信" ? "投信" : "外資"} ${v === 1 ? "顯著" : v === 2 ? "轉強" : v === 3 ? "觀察" : "—"}</span>`;
   const rows = WATCH.items.map(x => ({ ...x, t: listed(state.date, "投信", x.c), i: listed(state.date, "外資", x.c), last: lastListed(x.c, state.date) }))
-    .sort((p, q) => (q.t || q.i ? 1 : 0) - (p.t || p.i ? 1 : 0) || (q.last || "").localeCompare(p.last || ""));
+    .sort((p, q) => (isSig(q.t) || isSig(q.i) ? 1 : 0) - (isSig(p.t) || isSig(p.i) ? 1 : 0) || (q.last || "").localeCompare(p.last || ""));
   $("wlBody").innerHTML = rows.map(x => `<div class="wl-row" data-c="${x.c}" tabindex="0"><div><span class="num">${x.c}</span> ${x.n}</div><div>${chip("投信", x.t)}</div><div>${chip("外資", x.i)}</div><div class="wl-last watch-note">${x.last ? (x.last === state.date ? "這天上榜" : `最近上榜 ${mdS(x.last)}`) : "近期沒上榜"}</div><button type="button" class="xbtn wl-x" aria-label="取消追蹤 ${x.n}" title="取消追蹤">✕</button></div>`).join("")
     + `<p class="watch-note" style="margin:6px 0 0">顯示 ${dlabel(state.date)} 的狀態，點一檔看明細。</p>`;
 }

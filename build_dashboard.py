@@ -117,7 +117,7 @@ def build_series(out: dict, latest: dt.date) -> dict:
     i／t＝外資／投信買賣超（張），fi／ft＝兩者的力度（i 沿用舊名，以前是三大法人），p＝收盤價；陣列和 d（日期）一一對應。"""
     w = PARAMS["window"]
     days = c.collect(KEEP_DAYS + w, latest, include_otc=True, deadline=time.time() - 1)
-    codes = {r["c"] for e in out["dates"].values() for inv in e for lst in ("picks", "strong") for r in e[inv][lst]}
+    codes = {r["c"] for e in out["dates"].values() for inv in e for lst in ("picks", "strong", "watch") for r in e[inv].get(lst, [])}
     n = len(days)
     net = {inv: {code: [0.0] * n for code in codes} for inv in MODES}
     shares: dict[str, float] = {}
@@ -178,7 +178,13 @@ def main() -> None:
             _, picks, strong = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, MIN_RATIO[inv],
                                         p["fast"], p["slow"], vol, markets, p["min_volume"])
             _, p0, s0 = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, MIN_RATIO[inv], p["fast"], p["slow"])
+            # 觀察名單：力度也達標、當天買超、成交量夠，但佔股本比沒到門檻（不算正式訊號，只給會員參考）
+            _, loose, _ = c.screen(days, inv, p["window"], p["k"], p["confirm"], "靈敏", 0,
+                                   p["fast"], p["slow"], vol, markets, p["min_volume"])
+            strict = {r["代號"] for r in picks} | {r["代號"] for r in strong}
+            watch = [r for r in loose if r["代號"] not in strict]
             entry[inv] = {"picks": [row(r, close, prev) for r in picks], "strong": [row(r, close, prev) for r in strong],
+                          "watch": [row(r, close, prev) for r in watch],
                           "before": {"picks": len(p0), "strong": len(s0)}}
         out["dates"][ds] = entry
     if not out["dates"]:
@@ -232,7 +238,7 @@ def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
     for d in ds_all[-DEMO_LOCKED:]:
         if d > end:
             demo["dates"][d] = {"locked": True, **{inv: locked_summary(out["dates"][d][inv]) for inv in MODES}}
-    codes = {r["c"] for d in keep for e in [out["dates"][d]] for inv in MODES for lst in ("picks", "strong") for r in e[inv][lst]}
+    codes = {r["c"] for d in keep for e in [out["dates"][d]] for inv in MODES for lst in ("picks", "strong", "watch") for r in e[inv].get(lst, [])}
     n = ser["d"].index(end) + 1 if end in ser["d"] else 0
     dser = {"d": ser["d"][:n], "s": {k: {f: v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}
     note = f"展示版：{end[:4]}-{end[4:6]}-{end[6:]} 以前的資料完整開放，最近的交易日只顯示檔數與產業；付費會員每個交易日 17:30 看到最新完整名單"
