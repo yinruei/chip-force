@@ -2,7 +2,7 @@
 """
 由快取資料產生單檔視覺化頁面 output/dashboard.html（內含最近 10 個交易日、兩種法人的結果）。
 只讀 data/ 的快取，不連網；每天排程跑完選股後執行。
-參數須與 daily.yml 的選股參數一致（外資＝靈敏、投信＝穩健）。
+參數須與 daily.yml 的選股參數一致（外資、投信都是穩健模式，最低佔股本比各自設定，見 MIN_RATIO）。
 """
 from __future__ import annotations
 
@@ -19,7 +19,9 @@ HERE = Path(__file__).resolve().parent
 SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/backtest_summary.json 放回頁面
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
-MODES = {"外資": "靈敏", "投信": "穩健"}   # 2026-10-20 起由三大法人改成外資
+MODES = {"外資": "穩健", "投信": "穩健"}   # 2026-10-20 起由三大法人改成外資
+# 穩健模式的最低佔股本比(%)，依法人各自設定（2026-10-21 回測：外資 1% 以下各區間都輸大盤、投信 0.05% 以下最差）
+MIN_RATIO = {"外資": 1.0, "投信": 0.05}
 # 展示版（/demo，不用登入）：用延遲的舊資料讓非會員看介面；付費會員才看得到最新的
 DEMO_LAG = 20    # 至少延遲幾個交易日（約一個月）
 DEMO_DAYS = 10   # 顯示幾個交易日（兩週，「本週統整」才看得出效果）
@@ -173,9 +175,9 @@ def main() -> None:
         prev = load_close(trading[i - 1]) if i > 0 else {}
         entry = {}
         for inv, mode in MODES.items():
-            _, picks, strong = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, p["min_ratio"],
+            _, picks, strong = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, MIN_RATIO[inv],
                                         p["fast"], p["slow"], vol, markets, p["min_volume"])
-            _, p0, s0 = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, p["min_ratio"], p["fast"], p["slow"])
+            _, p0, s0 = c.screen(days, inv, p["window"], p["k"], p["confirm"], mode, MIN_RATIO[inv], p["fast"], p["slow"])
             entry[inv] = {"picks": [row(r, close, prev) for r in picks], "strong": [row(r, close, prev) for r in strong],
                           "before": {"picks": len(p0), "strong": len(s0)}}
         out["dates"][ds] = entry

@@ -31,7 +31,8 @@ from pathlib import Path
 import chip_force as c
 
 HORIZONS = (1, 5, 10, 20)
-INVESTORS = {"外資": "靈敏", "投信": "穩健"}   # 與 daily.yml 一致
+INVESTORS = {"外資": "穩健", "投信": "穩健"}
+MIN_RATIO = {"外資": 1.0, "投信": 0.05}   # 與 build_dashboard.py、daily.yml 一致
 PX_FIELDS = ["code", "market", "open", "close", "lots"]
 
 
@@ -117,7 +118,7 @@ def run_backtest(days, px, window=60, k=2.0, confirm=1, min_ratio=0.05, min_volu
             bench[h] = sum(rs) / len(rs) if rs else None
 
         for inv, mode in INVESTORS.items():
-            _, picks, strong = c.screen(sl, inv, window, k, confirm, mode, min_ratio, fast, slow, vol, markets, min_volume)
+            _, picks, strong = c.screen(sl, inv, window, k, confirm, mode, MIN_RATIO.get(inv, min_ratio), fast, slow, vol, markets, min_volume)
             for group, recs in (("顯著買超", picks), ("買方轉強", strong)):
                 for rec in recs:
                     z = rec["力度z"]
@@ -167,7 +168,7 @@ def write_report(rows, trades, meta, out_dir: Path) -> Path:
                         round(t["gross"], 3), round(t["net"], 3), round(t["bench"], 3)])
     md = [f"# 籌碼力度回測\n",
           f"- 訊號日：{meta['first']} ～ {meta['last']}（共 {meta['signal_days']} 個有價量資料的交易日）",
-          f"- 條件：比較區間 {meta['window']} 日、z ≥ {meta['k']}、成交張數 ≥ {meta['min_volume']:g}；外資＝靈敏模式，投信＝穩健模式（佔股本比 ≥ {meta['min_ratio']}%）",
+          f"- 條件：比較區間 {meta['window']} 日、z ≥ {meta['k']}、成交張數 ≥ {meta['min_volume']:g}；穩健模式（佔股本比：外資 ≥ {MIN_RATIO['外資']}%、投信 ≥ {MIN_RATIO['投信']}%）",
           f"- 進場＝訊號隔日開盤價，出場＝持有 N 日後收盤價；淨報酬已扣來回成本 {meta['cost']}%",
           "- 基準＝同一天、同樣流動性門檻的全市場普通股，用同樣進出場規則的等權平均；超額＝淨報酬 − 基準",
           "- t 值：以「每個訊號日的平均超額報酬」計算；持有期重疊，實際顯著性比表面上低",

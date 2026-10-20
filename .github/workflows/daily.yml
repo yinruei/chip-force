@@ -63,8 +63,9 @@ jobs:
           INPUT_DATE: ${{ inputs.date }}
         run: |
           IFS=', ' read -ra DS <<< "$INPUT_DATE"
-          for d in "${DS[@]}"; do python chip_force.py --investor 外資 --date "$d"; done
-          python chip_force.py --investor 外資
+          # 外資：穩健模式、外本比至少 1%（和 build_dashboard.py 的 MIN_RATIO 一致）
+          for d in "${DS[@]}"; do python chip_force.py --investor 外資 --mode 穩健 --min-ratio 1.0 --date "$d"; done
+          python chip_force.py --investor 外資 --mode 穩健 --min-ratio 1.0
       - name: 投信 × 佔股本比（投本比）
         if: steps.chk.outputs.done != 'true'
         env:

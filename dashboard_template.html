@@ -417,7 +417,7 @@ const fmt = n => Number(n).toLocaleString("en-US");
 const WD = "日一二三四五六";
 const dlabel = d => { const dd = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6)); return `${d.slice(0, 4) !== dates[0].slice(0, 4) ? d.slice(0, 4) + "/" : ""}${+d.slice(4, 6)}/${+d.slice(6)}（${WD[dd.getDay()]}）`; };
 const dlong = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
-const MODE = { "外資": "靈敏", "投信": "穩健" };
+const MODE = { "外資": "穩健", "投信": "穩健" };
 // 標記：連續上榜（2 天以上）、近 10 日新上榜、雙榜；short 用在排行長條（位置較窄）
 const badges = (r, short) => (r.s >= 2 ? `<span class="bdg hot">🔥${short ? "" : "連"}${r.s}</span>` : "")
   + (r.w ? `<span class="bdg new">新</span>` : "") + (r.b ? `<span class="bdg both">⭐${short ? "" : "雙榜"}</span>` : "");
