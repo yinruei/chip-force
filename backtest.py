@@ -32,7 +32,7 @@ import chip_force as c
 
 HORIZONS = (1, 5, 10, 20)
 INVESTORS = {"外資": "穩健", "投信": "穩健"}
-MIN_RATIO = {"外資": 1.0, "投信": 0.05}   # 與 build_dashboard.py、daily.yml 一致
+MIN_RATIO = {"外資": 1.0, "投信": 0.2}   # 與 build_dashboard.py、daily.yml 一致
 PX_FIELDS = ["code", "market", "open", "close", "lots"]
 
 

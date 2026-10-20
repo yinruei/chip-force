@@ -41,10 +41,10 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 - 結果僅為公開資料之統計，非投資建議。
 
 ## 選股方法保密
-會員看得到的地方（`dashboard_template.html`、頁面裡的 `DATA`、`site/worker.js` 的使用說明 `/guide`、Skool 截圖）都不要寫出公式或參數（60 日、z、標準差、門檻 2、0.05%、1%、1000 張、20/60 日均線）。頁面資料只放門檻值 `params.k` 畫虛線，力度欄位叫 `f`、畫面上叫「力度」。
+會員看得到的地方（`dashboard_template.html`、頁面裡的 `DATA`、`site/worker.js` 的使用說明 `/guide`、Skool 截圖）都不要寫出公式或參數（60 日、z、標準差、門檻 2、0.05%、0.2%、1%、1000 張、20/60 日均線）。頁面資料只放門檻值 `params.k` 畫虛線，力度欄位叫 `f`、畫面上叫「力度」。
 
 ## 2026-10-20 的兩個改動
-- 第二份清單由「三大法人」改成「**外資**」（外資及陸資，含外資自營商）。2026-10-21 起外資也用穩健模式、外本比 ≥ 1%（`build_dashboard.py` 的 `MIN_RATIO`、`daily.yml` 的 `--min-ratio 1.0`、`backtest.py` 要一致；回測：外資 1% 以下各區間都輸大盤）。`build_dashboard.py` 的 `MODES`、`daily.yml`、`backtest.py`、`notify.py`、`screenshot.py`、`social_card.py`、頁面的 `INV` 都要一致。舊的 `output/*_三大法人.md` 留著當紀錄。
+- 第二份清單由「三大法人」改成「**外資**」（外資及陸資，含外資自營商）。2026-10-21 起兩份清單都用穩健模式：外資外本比 ≥ 1%、投信投本比 ≥ 0.2%（`build_dashboard.py` 的 `MIN_RATIO`、`daily.yml` 的 `--min-ratio`、`backtest.py` 要一致；回測：外資 1% 以下各區間都輸大盤，投信 0.05% 以下最差、0.2% 以上平均最好）。`build_dashboard.py` 的 `MODES`、`daily.yml`、`backtest.py`、`notify.py`、`screenshot.py`、`social_card.py`、頁面的 `INV` 都要一致。舊的 `output/*_三大法人.md` 留著當紀錄。
 - **上櫃外資／投信／自營以前全是 0**：櫃買中心法人明細欄位名稱只有「買進股數／賣出股數／買賣超股數」重複，`chip_force.parse_tpex_insti` 改成依位置讀（`TPEX_POS`），並檢查外資＋投信＋自營＝三大法人；歷史快取用 `refill_tpex.py`（Actions「回補上櫃法人資料」）補。欄位又改時跑 Actions「檢查資料來源欄位」看結構。
 
 ## 選股頁資料欄位

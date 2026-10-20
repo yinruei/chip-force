@@ -72,8 +72,9 @@ jobs:
           INPUT_DATE: ${{ inputs.date }}
         run: |
           IFS=', ' read -ra DS <<< "$INPUT_DATE"
-          for d in "${DS[@]}"; do python chip_force.py --investor 投信 --mode 穩健 --date "$d"; done
-          python chip_force.py --investor 投信 --mode 穩健
+          # 投信：穩健模式、投本比至少 0.2%（和 build_dashboard.py 的 MIN_RATIO 一致）
+          for d in "${DS[@]}"; do python chip_force.py --investor 投信 --mode 穩健 --min-ratio 0.2 --date "$d"; done
+          python chip_force.py --investor 投信 --mode 穩健 --min-ratio 0.2
 
       # 頁面的收盤價與漲跌幅用 data/px_*.csv；只補缺的日子，失敗不影響其他步驟
       - name: 補抓近期收盤價
