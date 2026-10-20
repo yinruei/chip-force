@@ -1,0 +1,32 @@
+name: 回補上櫃法人資料
+
+# 手動執行：重抓櫃買中心，補上快取裡上櫃的外資／投信／自營買賣超（以前抓成 0）。可以重複執行，已補好的日子會略過。
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: chip-force-daily-run
+  cancel-in-progress: false
+
+jobs:
+  refill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: 回補
+        run: python refill_tpex.py --budget-min 45
+      - name: 寫入結果
+        if: always()
+        run: |
+          git config user.name  "chip-force-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data
+          git diff --cached --quiet || git commit -m "回補上櫃外資／投信／自營買賣超"
+          git pull --rebase -X theirs origin "${GITHUB_REF_NAME}"
+          git push

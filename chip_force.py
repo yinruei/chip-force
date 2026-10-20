@@ -122,24 +122,39 @@ def fetch_tpex_day(d: dt.date) -> list[dict] | None:
     if not tables or not tables[0].get("data"):
         return []
     t = tables[0]
-    f = t.get("fields", [])
+    return parse_tpex_insti(t.get("fields", []), t["data"])
+
+
+# 櫃買中心「三大法人買賣明細」的欄位名稱只有「買進股數／賣出股數／買賣超股數」重複 7 組，
+# 看不出是哪個法人，只能依位置讀（2026-10 確認）：
+#   0 代號、1 名稱、2–4 外資及陸資(不含外資自營商)、5–7 外資自營商、8–10 外資及陸資合計、
+#   11–13 投信、14–16 自營商(自行買賣)、17–19 自營商(避險)、20–22 自營商合計、23 三大法人合計
+# 以前用關鍵字找「外資」「投信」都找不到，上櫃的外資、投信、自營一直被當成 0（只有三大法人是對的）。
+TPEX_POS = {"外資": 10, "投信": 13, "自營": 22, "三大法人": 23}
+
+
+def parse_tpex_insti(f: list[str], data: list[list]) -> list[dict] | None:
     ic, iname = _col(f, "代號"), _col(f, "名稱")
-    i_fx = _col(f, "外資及陸資", "買賣超")
-    i_it = _col(f, "投信", "買賣超")
-    i_dl = _col(f, "自營商", "買賣超")
     i_tot = _col(f, "三大法人", "買賣超")
     if None in (ic, iname, i_tot):
         return None
-    rows = []
-    for row in t["data"]:
-        rows.append({
-            "code": str(row[ic]).strip(), "name": str(row[iname]).strip(), "market": "上櫃",
-            "外資": _num(row[i_fx]) if i_fx is not None else 0.0,
-            "投信": _num(row[i_it]) if i_it is not None else 0.0,
-            "自營": _num(row[i_dl]) if i_dl is not None else 0.0,
-            "三大法人": _num(row[i_tot]),
-            "shares": 0.0,  # 由 openapi 補
-        })
+    named = {k: _col(f, *ks) for k, ks in (("外資", ("外資及陸資", "買賣超")), ("投信", ("投信", "買賣超")), ("自營", ("自營商", "買賣超")))}
+    if all(v is not None for v in named.values()):
+        pos = {**named, "三大法人": i_tot}                    # 欄位名稱有寫法人（舊版或之後改版）
+    elif len(f) == 24 and i_tot == TPEX_POS["三大法人"] and sum(x.startswith("買賣超") for x in f) == 7:
+        pos = TPEX_POS                                       # 目前的版本：依位置
+    else:
+        print(f"  ! 櫃買中心法人欄位看不懂（{len(f)} 欄），上櫃只留三大法人合計", file=sys.stderr)
+        pos = {"外資": None, "投信": None, "自營": None, "三大法人": i_tot}
+    rows, bad = [], 0
+    for row in data:
+        v = {k: (_num(row[i]) if i is not None else 0.0) for k, i in pos.items()}
+        if pos["外資"] is not None and abs(v["外資"] + v["投信"] + v["自營"] - v["三大法人"]) > 1:
+            bad += 1
+        rows.append({"code": str(row[ic]).strip(), "name": str(row[iname]).strip(), "market": "上櫃",
+                     **v, "shares": 0.0})  # 發行股數由 openapi 補
+    if bad:
+        print(f"  ! 櫃買中心：{bad} 檔「外資＋投信＋自營」不等於三大法人合計，欄位可能又改了", file=sys.stderr)
     return rows
 
 
