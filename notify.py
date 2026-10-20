@@ -31,7 +31,7 @@ HERE = Path(__file__).resolve().parent
 PAGE = HERE / "output" / "dashboard.html"
 TZ = dt.timezone(dt.timedelta(hours=8))
 SITE = os.environ.get("SITE_URL", "https://chip-force-site.littleblacker29.workers.dev")
-INVS = (("投信", "投信"), ("三大法人", "三大法人"))
+INVS = (("投信", "投信"), ("外資", "外資"))
 MAX_LINES = 5
 
 

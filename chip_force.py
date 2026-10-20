@@ -16,7 +16,7 @@
 上櫃（櫃買中心）資料為選配，抓不到時自動略過。
 
 用法：
-  python chip_force.py                      # 預設：三大法人、W=60、k=2.0
+  python chip_force.py                      # 預設：外資、W=60、k=2.0
   python chip_force.py --investor 投信       # 投本比
   python chip_force.py --window 120 --k 2.5 --confirm 2 --mode 穩健
 """
@@ -423,7 +423,7 @@ def write_outputs(date: dt.date, picks, strengthen, args) -> Path:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="籌碼力度（法人力度）每日選股")
-    ap.add_argument("--investor", choices=INVESTORS, default="三大法人")
+    ap.add_argument("--investor", choices=INVESTORS, default="外資")
     ap.add_argument("--window", type=int, choices=(20, 60, 120), default=60, help="極端值比較區間")
     ap.add_argument("--k", type=float, choices=(1.5, 2.0, 2.5), default=2.0, help="極端靈敏度")
     ap.add_argument("--confirm", type=int, choices=(1, 2, 3), default=1, help="訊號確認天數")

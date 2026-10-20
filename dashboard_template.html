@@ -308,7 +308,7 @@ footer { font-size: 12px; color: var(--ink-3); }
       <input type="search" id="q" placeholder="搜尋代號或名稱" aria-label="搜尋代號或名稱">
     </div>
     <div class="ind-filter" id="indFilter" hidden></div>
-    <p class="tbl-hint"><span class="mk l">市</span>上市　<span class="mk o">櫃</span>上櫃　<span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和三大法人同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
+    <p class="tbl-hint"><span class="mk l">市</span>上市　<span class="mk o">櫃</span>上櫃　<span class="bdg hot" style="margin:0">🔥連3</span> 連續 3 個交易日上榜　<span class="bdg new" style="margin:0">新</span> 近 10 個交易日第一次上榜　<span class="bdg both" style="margin:0">⭐雙榜</span> 投信和外資同時上榜　<b style="font-weight:500;color:var(--ink-2)">點任一檔可看近 60 個交易日的法人買賣超、力度與股價</b></p>
     <div class="tbl-scroll">
       <table class="freeze" id="dayTable">
         <thead><tr id="thead"></tr></thead>
@@ -404,7 +404,7 @@ footer { font-size: 12px; color: var(--ink-3); }
 <script>
 const DATA = __DATA__;
 const P = DATA.params;
-const INV = [["投信", "投信（投本比）"], ["三大法人", "三大法人"]];
+const INV = [["投信", "投信（投本比）"], ["外資", "外資"]];
 const COLS = [
   ["c", "代號"], ["n", "名稱"], ["ind", "產業"], ["p", "收盤"], ["g", "漲跌%"], ["v", "成交張數"], ["net", "法人買賣超(張)"], ["r", "佔股本比(%)"], ["f", "力度"], ["s", "連續上榜"], ["x", "轉強"]
 ];
@@ -417,7 +417,7 @@ const fmt = n => Number(n).toLocaleString("en-US");
 const WD = "日一二三四五六";
 const dlabel = d => { const dd = new Date(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6)); return `${d.slice(0, 4) !== dates[0].slice(0, 4) ? d.slice(0, 4) + "/" : ""}${+d.slice(4, 6)}/${+d.slice(6)}（${WD[dd.getDay()]}）`; };
 const dlong = d => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`;
-const MODE = { "三大法人": "靈敏", "投信": "穩健" };
+const MODE = { "外資": "靈敏", "投信": "穩健" };
 // 標記：連續上榜（2 天以上）、近 10 日新上榜、雙榜；short 用在排行長條（位置較窄）
 const badges = (r, short) => (r.s >= 2 ? `<span class="bdg hot">🔥${short ? "" : "連"}${r.s}</span>` : "")
   + (r.w ? `<span class="bdg new">新</span>` : "") + (r.b ? `<span class="bdg both">⭐${short ? "" : "雙榜"}</span>` : "");
@@ -594,7 +594,7 @@ function renderWeek() {
   $("wRepSub").textContent = full.length ? `每天都上榜 ${full.length} 檔` : "沒有每天都上榜的股票";
   const both = picks.filter(a => a.b);
   $("wBoth").textContent = both.length;
-  $("wBothSub").textContent = "這週至少有一天投信和三大法人同時上榜";
+  $("wBothSub").textContent = "這週至少有一天投信和外資同時上榜";
   renderWeekTable(w, picks, strong);
   if (!SER) loadSeries().then(() => { if (state.view === "week") renderWeek(); }).catch(() => {});
 }
@@ -859,7 +859,7 @@ const SERIES_URL = DATA.demo ? "/demo/series.json" : "series.json";
 const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credentials: "same-origin" })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(j => (SER = j)).catch(e => { serLoading = null; throw e; }));
-const SKEY = { "三大法人": ["i", "fi"], "投信": ["t", "ft"] };
+const SKEY = { "外資": ["i", "fi"], "投信": ["t", "ft"] };
 const det = { code: null, name: "", m: "", inv: null, last: null };
 // 某天在某法人清單的狀態：1 顯著買超、2 買方轉強、0 沒上榜
 const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e || !e.picks) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : 0; };
@@ -867,14 +867,14 @@ const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
 const compact = v => { const a = Math.abs(v); return a >= 10000 ? (v / 10000).toFixed(a >= 100000 ? 0 : 1) + "萬" : fmt(Math.round(v)); };
 
 const indOf = c => {
-  for (const ds of dates) for (const inv of ["投信", "三大法人"]) {
+  for (const ds of dates) for (const inv of ["投信", "外資"]) {
     const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
     if (r && r.ind) return r.ind;
   }
   return "";
 };
 const thOf = c => {
-  for (const ds of dates) for (const inv of ["投信", "三大法人"]) {
+  for (const ds of dates) for (const inv of ["投信", "外資"]) {
     const e = DATA.dates[ds][inv], r = e && e.picks && (e.picks.find(x => x.c === c) || e.strong.find(x => x.c === c));
     if (r) return r.th || [];
   }
@@ -921,7 +921,7 @@ function renderDetail() {
   const st = D.map(ds => listed(ds, det.inv, det.code));
   const upto = st.slice(0, sel + 1);
   let streak = 0; for (let i = sel; i >= 0 && st[i] === 1; i--) streak++;
-  const both = D.slice(0, sel + 1).filter(ds => listed(ds, "投信", det.code) === 1 && listed(ds, "三大法人", det.code) === 1).length;
+  const both = D.slice(0, sel + 1).filter(ds => listed(ds, "投信", det.code) === 1 && listed(ds, "外資", det.code) === 1).length;
   body.innerHTML = `<div class="dlg-stats">
       <div><div class="k">近 10 日上榜</div><div class="v">${upto.slice(-10).filter(v => v === 1).length} 次</div></div>
       <div><div class="k">近 60 日上榜</div><div class="v">${upto.filter(v => v === 1).length} 次</div></div>
@@ -1038,7 +1038,7 @@ function paintStar() {
   b.hidden = !WATCH.on; b.setAttribute("aria-pressed", String(on)); b.textContent = on ? "★ 追蹤中" : "☆ 追蹤";
 }
 $("dlgStar").onclick = () => toggleWatch({ c: det.code, n: det.name, m: det.m });
-const lastListed = (c, upto) => dates.find(ds => ds <= upto && (listed(ds, "投信", c) || listed(ds, "三大法人", c))) || null;
+const lastListed = (c, upto) => dates.find(ds => ds <= upto && (listed(ds, "投信", c) || listed(ds, "外資", c))) || null;
 function renderWatch() {
   const box = $("watchPanel");
   box.hidden = !WATCH.on || state.view !== "pick";
@@ -1048,10 +1048,10 @@ function renderWatch() {
     $("wlBody").innerHTML = '<p class="watch-note">打開任一檔的個股明細，按右上角「☆ 追蹤」就會加到這裡。開啟上榜通知後，追蹤的股票上榜時，每個交易日收盤更新完會通知你。</p>';
     return;
   }
-  const chip = (inv, v) => `<span class="chip ${v === 1 ? "p1" : v === 2 ? "p2" : ""}">${inv === "投信" ? "投信" : "三大"} ${v === 1 ? "顯著" : v === 2 ? "轉強" : "—"}</span>`;
-  const rows = WATCH.items.map(x => ({ ...x, t: listed(state.date, "投信", x.c), i: listed(state.date, "三大法人", x.c), last: lastListed(x.c, state.date) }))
+  const chip = (inv, v) => `<span class="chip ${v === 1 ? "p1" : v === 2 ? "p2" : ""}">${inv === "投信" ? "投信" : "外資"} ${v === 1 ? "顯著" : v === 2 ? "轉強" : "—"}</span>`;
+  const rows = WATCH.items.map(x => ({ ...x, t: listed(state.date, "投信", x.c), i: listed(state.date, "外資", x.c), last: lastListed(x.c, state.date) }))
     .sort((p, q) => (q.t || q.i ? 1 : 0) - (p.t || p.i ? 1 : 0) || (q.last || "").localeCompare(p.last || ""));
-  $("wlBody").innerHTML = rows.map(x => `<div class="wl-row" data-c="${x.c}" tabindex="0"><div><span class="num">${x.c}</span> ${x.n}</div><div>${chip("投信", x.t)}</div><div>${chip("三大法人", x.i)}</div><div class="wl-last watch-note">${x.last ? (x.last === state.date ? "這天上榜" : `最近上榜 ${mdS(x.last)}`) : "近期沒上榜"}</div><button type="button" class="xbtn wl-x" aria-label="取消追蹤 ${x.n}" title="取消追蹤">✕</button></div>`).join("")
+  $("wlBody").innerHTML = rows.map(x => `<div class="wl-row" data-c="${x.c}" tabindex="0"><div><span class="num">${x.c}</span> ${x.n}</div><div>${chip("投信", x.t)}</div><div>${chip("外資", x.i)}</div><div class="wl-last watch-note">${x.last ? (x.last === state.date ? "這天上榜" : `最近上榜 ${mdS(x.last)}`) : "近期沒上榜"}</div><button type="button" class="xbtn wl-x" aria-label="取消追蹤 ${x.n}" title="取消追蹤">✕</button></div>`).join("")
     + `<p class="watch-note" style="margin:6px 0 0">顯示 ${dlabel(state.date)} 的狀態，點一檔看明細。</p>`;
 }
 $("wlBody").onclick = ev => {

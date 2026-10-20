@@ -2,8 +2,8 @@
 """
 把 output/dashboard.html 的上半部（日期、摘要、力度排行、散布圖）截成 PNG，方便貼到 Skool 課程。
 每個法人各一張：
-  output/screenshots/YYYYMMDD_投信.png、YYYYMMDD_三大法人.png（每天一份，只留最近 KEEP 天）
-  output/screenshots/latest_投信.png、latest_三大法人.png（永遠是最新一天）
+  output/screenshots/YYYYMMDD_投信.png、YYYYMMDD_外資.png（每天一份，只留最近 KEEP 天）
+  output/screenshots/latest_投信.png、latest_外資.png（永遠是最新一天）
 需要 playwright（pip install playwright && python -m playwright install chromium）。
 本機若已有 Chromium，可用環境變數 CHROMIUM_EXECUTABLE 指定路徑。
 """
@@ -21,7 +21,7 @@ PAGE = HERE / "output" / "dashboard.html"
 SHOTS = HERE / "output" / "screenshots"
 KEEP = 30
 # 頁面上「看哪個法人」按鈕的文字 → 檔名
-INVESTORS = {"投信（投本比）": "投信", "三大法人": "三大法人"}
+INVESTORS = {"投信（投本比）": "投信", "外資": "外資"}
 
 
 def latest_date(html: str) -> str:

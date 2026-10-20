@@ -26,7 +26,7 @@ OUT = HERE / "output" / "social"
 KEEP = 30
 TOP = 5
 WD = "一二三四五六日"
-INVESTORS = [("投信", "投信"), ("三大法人", "三大法人")]
+INVESTORS = [("投信", "投信"), ("外資", "外資")]
 
 
 def latest_day() -> tuple[str, dict]:

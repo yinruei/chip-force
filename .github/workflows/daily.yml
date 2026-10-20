@@ -53,18 +53,18 @@ jobs:
           while t.weekday()>4: t-=d.timedelta(days=1)
           print(t.strftime('%Y%m%d'))")
           echo "應有資料的交易日：$T"
-          if { [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.auto }}" = "true" ]; } && [ -s "data/vol_$T.csv" ] && [ -f "output/${T}_三大法人.md" ]; then
+          if { [ "${{ github.event_name }}" = "schedule" ] || [ "${{ inputs.auto }}" = "true" ]; } && [ -s "data/vol_$T.csv" ] && [ -f "output/${T}_外資.md" ]; then
             echo "done=true" >> "$GITHUB_OUTPUT"; echo "已完成，略過"
           fi
 
-      - name: 三大法人 × 佔股本比
+      - name: 外資 × 佔股本比
         if: steps.chk.outputs.done != 'true'
         env:
           INPUT_DATE: ${{ inputs.date }}
         run: |
           IFS=', ' read -ra DS <<< "$INPUT_DATE"
-          for d in "${DS[@]}"; do python chip_force.py --investor 三大法人 --date "$d"; done
-          python chip_force.py --investor 三大法人
+          for d in "${DS[@]}"; do python chip_force.py --investor 外資 --date "$d"; done
+          python chip_force.py --investor 外資
       - name: 投信 × 佔股本比（投本比）
         if: steps.chk.outputs.done != 'true'
         env:
@@ -113,7 +113,7 @@ jobs:
 
       - name: 顯示在 Actions 摘要
         if: always() && steps.chk.outputs.done != 'true'
-        run: cat output/latest_三大法人.md output/latest_投信.md >> "$GITHUB_STEP_SUMMARY" || true
+        run: cat output/latest_外資.md output/latest_投信.md >> "$GITHUB_STEP_SUMMARY" || true
 
       # always()：就算回補到一半逾時／失敗，已抓好的快取也先存起來，下次接著跑
       - name: 寫入結果

@@ -2,7 +2,7 @@
 """
 由快取資料產生單檔視覺化頁面 output/dashboard.html（內含最近 10 個交易日、兩種法人的結果）。
 只讀 data/ 的快取，不連網；每天排程跑完選股後執行。
-參數須與 daily.yml 的選股參數一致（三大法人＝靈敏、投信＝穩健）。
+參數須與 daily.yml 的選股參數一致（外資＝靈敏、投信＝穩健）。
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/backtest_summary.json 放回頁面
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
-MODES = {"三大法人": "靈敏", "投信": "穩健"}
+MODES = {"外資": "靈敏", "投信": "穩健"}   # 2026-10-20 起由三大法人改成外資
 # 展示版（/demo，不用登入）：用延遲的舊資料讓非會員看介面；付費會員才看得到最新的
 DEMO_LAG = 20    # 至少延遲幾個交易日（約一個月）
 DEMO_DAYS = 10   # 顯示幾個交易日（兩週，「本週統整」才看得出效果）
@@ -77,7 +77,7 @@ def load_close(ds: str) -> dict[str, float]:
 
 
 def add_tags(out: dict) -> None:
-    """標記：s＝連續上榜天數、w＝近 10 個交易日第一次上榜、b＝投信和三大法人同一天都上榜（只看顯著買超）。"""
+    """標記：s＝連續上榜天數、w＝近 10 個交易日第一次上榜、b＝投信和外資同一天都上榜（只看顯著買超）。"""
     ds_list = sorted(out["dates"])
     for inv in MODES:
         hist: list[set[str]] = []
@@ -92,7 +92,7 @@ def add_tags(out: dict) -> None:
             hist.append({r["c"] for r in picks})
     for ds in ds_list:
         e = out["dates"][ds]
-        both = {r["c"] for r in e["投信"]["picks"]} & {r["c"] for r in e["三大法人"]["picks"]}
+        both = {r["c"] for r in e["投信"]["picks"]} & {r["c"] for r in e["外資"]["picks"]}
         for inv in MODES:
             for r in e[inv]["picks"]:
                 r["b"] = r["c"] in both
@@ -112,7 +112,7 @@ def load_volume_cached(d: dt.date):
 
 def build_series(out: dict, latest: dt.date) -> dict:
     """個股明細（點股票時才載入）：近 KEEP_DAYS 個交易日、曾上榜股票的法人買賣超、力度、收盤價。
-    i／t＝三大法人／投信買賣超（張），fi／ft＝兩者的力度，p＝收盤價；陣列和 d（日期）一一對應。"""
+    i／t＝外資／投信買賣超（張），fi／ft＝兩者的力度（i 沿用舊名，以前是三大法人），p＝收盤價；陣列和 d（日期）一一對應。"""
     w = PARAMS["window"]
     days = c.collect(KEEP_DAYS + w, latest, include_otc=True, deadline=time.time() - 1)
     codes = {r["c"] for e in out["dates"].values() for inv in e for lst in ("picks", "strong") for r in e[inv][lst]}
@@ -137,7 +137,7 @@ def build_series(out: dict, latest: dt.date) -> dict:
         if not sh:
             continue
         item = {}
-        for inv, (kn, kf) in {"三大法人": ("i", "fi"), "投信": ("t", "ft")}.items():
+        for inv, (kn, kf) in {"外資": ("i", "fi"), "投信": ("t", "ft")}.items():
             ratio = [x / sh * 100.0 for x in net[inv][code]]
             fs = []
             for t in keep:

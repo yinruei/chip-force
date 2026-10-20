@@ -11,7 +11,7 @@
 1. 本專案就是這個 private repo（`yinruei/chip-force`），排程檔為 `.github/workflows/daily.yml`。
 2. 到 repo 的 **Actions** 頁選「籌碼力度每日選股」，按一次 **Run workflow** 做第一次回補（約 10–20 分鐘）。
 3. 之後每個交易日台北時間 **17:30** 起自動執行（由會員網站的 Cloudflare 排程觸發，見 `site/README.md`），結果在：
-   - `output/latest_三大法人.md`、`output/latest_投信.md`（最新一天）
+   - `output/latest_外資.md`、`output/latest_投信.md`（最新一天）
    - `output/YYYYMMDD_*_顯著買超.csv`（完整清單）
    - 每次執行的 Actions 摘要頁也會直接顯示表格
 4. 想在手機收到通知：repo 右上 **Watch → Custom → Actions**（或看 commit）。
@@ -19,7 +19,7 @@
 ## 本機執行
 
 ```bash
-python chip_force.py                         # 三大法人，W=60、k=2.0
+python chip_force.py                         # 外資，W=60、k=2.0
 python chip_force.py --investor 投信 --mode 穩健   # 投本比
 python chip_force.py --investor 外資 --window 120 --k 2.5 --confirm 2
 python chip_force.py --date 2026-09-29       # 指定日期
@@ -31,7 +31,7 @@ python chip_force.py --date 2026-09-29       # 指定日期
 
 | 參數 | 對應原指標 | 可選 | 預設 |
 |---|---|---|---|
-| `--investor` | 看哪個法人 | 三大法人／外資／投信／自營 | 三大法人 |
+| `--investor` | 看哪個法人 | 三大法人／外資／投信／自營 | 外資 |
 | `--window` | 極端值比較區間 | 20／60／120 | 60 |
 | `--k` | 極端靈敏度（越小越靈敏） | 1.5／2.0／2.5 | 2.0 |
 | `--confirm` | 訊號確認天數 | 1／2／3 | 1 |
