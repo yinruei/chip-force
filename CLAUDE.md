@@ -45,6 +45,7 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 
 ## 2026-10-20 的兩個改動
 - 第二份清單由「三大法人」改成「**外資**」（外資及陸資，含外資自營商）。2026-10-21 起兩份清單都用穩健模式：外資外本比 ≥ 1%、投信投本比 ≥ 0.2%（`build_dashboard.py` 的 `MIN_RATIO`、`daily.yml` 的 `--min-ratio`、`backtest.py` 要一致；回測：外資 1% 以下各區間都輸大盤，投信 0.05% 以下最差、0.2% 以上平均最好）。`build_dashboard.py` 的 `MODES`、`daily.yml`、`backtest.py`、`notify.py`、`screenshot.py`、`social_card.py`、頁面的 `INV` 都要一致。舊的 `output/*_三大法人.md` 留著當紀錄。
+- 觀察名單（DATA 每天每法人的 `watch`）：用靈敏模式、最低比例 0 再篩一次，扣掉 `picks` 與 `strong` 剩下的（力度達標、當天買超、成交量夠，但佔股本比沒到 `MIN_RATIO`）。頁面清單分頁「顯著買超／觀察／買方轉強」、散布圖灰點、`listed()` 回傳 3；不算正式訊號，不進 `add_tags`、上榜通知、本週統整、`lastListed`。
 - **上櫃外資／投信／自營以前全是 0**：櫃買中心法人明細欄位名稱只有「買進股數／賣出股數／買賣超股數」重複，`chip_force.parse_tpex_insti` 改成依位置讀（`TPEX_POS`），並檢查外資＋投信＋自營＝三大法人；歷史快取用 `refill_tpex.py`（Actions「回補上櫃法人資料」）補。欄位又改時跑 Actions「檢查資料來源欄位」看結構。
 
 ## 選股頁資料欄位
