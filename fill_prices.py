@@ -12,8 +12,8 @@ import backtest as bt
 import chip_force as c
 from build_dashboard import KEEP_DAYS
 
-# 法人資料快取 data/YYYYMMDD.csv 的日期 = 交易日；多抓一天，才算得出第一天的漲跌幅
-days = sorted(p.stem for p in c.CACHE.glob("*.csv") if p.stem.isdigit() and len(p.stem) == 8)[-(KEEP_DAYS + 1):]
+# 法人資料快取 data/YYYYMMDD.csv 的日期 = 交易日（休市日的快取只有標題列，略過）；多抓一天，才算得出第一天的漲跌幅
+days = sorted(p.stem for p in c.CACHE.glob("*.csv") if p.stem.isdigit() and len(p.stem) == 8 and p.stat().st_size > 200)[-(KEEP_DAYS + 1):]
 deadline = time.time() + 15 * 60
 for ds in days:
     if (c.CACHE / f"px_{ds}.csv").exists():

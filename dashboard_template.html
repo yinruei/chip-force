@@ -20,6 +20,7 @@
   --s2-soft: #fbe3d8;
   --focus: #2a78d6;
   --up: #d1343a; --down: #148a4c;
+  --ma5: #c98a00; --ma20: #2a78d6; --ma60: #8b4fc9; --ma120: #9a6234; --ma240: #6b7280;   /* 個股明細的均線 */
   --hot-bg: #fde4d6; --hot: #b2441a; --new-bg: #dcf0e2; --new: #1d7a3e; --both-bg: #f5ebc4; --both: #7f6200;
   --font-ui: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -30,6 +31,7 @@
     --line: #2c2f31; --grid: #262829; --s1: #3987e5; --s1-soft: #1c2f48; --s2: #d95926; --s2-soft: #3b2418;
     --focus: #6da7ec; color-scheme: dark;
     --up: #f0686c; --down: #46c47c; --hot-bg: #43261a; --hot: #f39a6d; --new-bg: #183626; --new: #6fd194; --both-bg: #3a3214; --both: #e6c65a;
+    --ma5: #e6b53d; --ma20: #5a9be8; --ma60: #a77de0; --ma120: #c48a5a; --ma240: #9aa0a6;
   }
 }
 :root[data-theme="dark"] {
@@ -37,6 +39,7 @@
   --line: #2c2f31; --grid: #262829; --s1: #3987e5; --s1-soft: #1c2f48; --s2: #d95926; --s2-soft: #3b2418;
   --focus: #6da7ec; color-scheme: dark;
     --up: #f0686c; --down: #46c47c; --hot-bg: #43261a; --hot: #f39a6d; --new-bg: #183626; --new: #6fd194; --both-bg: #3a3214; --both: #e6c65a;
+    --ma5: #e6b53d; --ma20: #5a9be8; --ma60: #a77de0; --ma120: #c48a5a; --ma240: #9aa0a6;
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -170,6 +173,12 @@ tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; 
 .dlg-chart h3 .lg { font-weight: 400; font-size: 12px; color: var(--ink-3); display: inline-flex; align-items: center; gap: 5px; }
 .dlg-chart h3 .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 .dlg-chart svg { width: 100%; display: block; touch-action: pan-y; }
+.ma-t { font: inherit; font-size: 12px; font-family: var(--font-num); border: 1px solid var(--line); background: var(--surface); color: var(--ink-3); border-radius: 999px; padding: 1px 8px 1px 6px; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.ma-t i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; background: var(--ink-3); opacity: .35; }
+.ma-t[aria-pressed="true"] { color: var(--ink); border-color: var(--ink-3); }
+.ma-t[aria-pressed="true"] i { opacity: 1; }
+.ma-t:disabled { cursor: default; opacity: .45; }
+.ma-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 4px; }
 .dlg-chart svg text { font-family: var(--font-num); font-size: 10.5px; fill: var(--ink-3); }
 .dlg-chart svg .lbl { font-family: var(--font-ui); fill: var(--ink-2); font-size: 11px; }
 .dlg-note { font-size: 12px; color: var(--ink-3); margin: 0; }
@@ -865,6 +874,21 @@ const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credent
   .then(j => (SER = j)).catch(e => { serLoading = null; throw e; }));
 const SKEY = { "外資": ["i", "fi"], "投信": ["t", "ft"] };
 const det = { code: null, name: "", m: "", inv: null, last: null };
+// 均線：可以選要顯示哪幾條，記在這台裝置
+const MAS = [[5, "--ma5"], [20, "--ma20"], [60, "--ma60"], [120, "--ma120"], [240, "--ma240"]];
+let maOn = new Set([5, 20, 60]);
+try { const v = JSON.parse(localStorage.getItem("cf-ma")); if (Array.isArray(v)) maOn = new Set(v.filter(n => MAS.some(m => m[0] === n))); } catch (e) {}
+// 每條均線對齊 close（近 60 日）：用這檔自己有成交的最近 n 個收盤價平均（停牌沒成交的日子不算），不足 n 個是 null
+function maSeries(pre, close) {
+  const all = pre.concat(close), off = pre.length, out = {};
+  const valid = [], at = [];   // valid＝依序的有效收盤價；at[j]＝all[0..j] 裡有幾個有效收盤價
+  all.forEach((v, j) => { if (v) valid.push(v); at[j] = valid.length; });
+  const cum = [0]; valid.forEach(v => cum.push(cum[cum.length - 1] + v));
+  MAS.forEach(([n]) => {
+    out[n] = close.map((c, i) => { const k = at[off + i]; return c && k >= n ? (cum[k] - cum[k - n]) / n : null; });
+  });
+  return out;
+}
 // 某天在某法人清單的狀態：1 顯著買超、2 買方轉強、0 沒上榜
 const listed = (ds, inv, code) => { const e = DATA.dates[ds] && DATA.dates[ds][inv]; if (!e || !e.picks) return 0; return e.picks.some(r => r.c === code) ? 1 : e.strong.some(r => r.c === code) ? 2 : (e.watch || []).some(r => r.c === code) ? 3 : 0; };
 const md = d => `${+d.slice(4, 6)}/${+d.slice(6)}`;
@@ -920,7 +944,8 @@ function renderDetail() {
   if (!x) { body.innerHTML = '<div class="dlg-msg">這檔目前沒有明細資料。</div>'; return; }
   const D = SER.d, N = D.length;
   const [kn, kf] = SKEY[det.inv];
-  const net = x[kn], force = x[kf], close = x.p;
+  const net = x[kn], force = x[kf], close = x.p, op = x.o || [], hi_ = x.h || [], lo_ = x.l || [];
+  const mas = maSeries(x.pc || [], close);
   const sel = D.indexOf(det.date) >= 0 ? D.indexOf(det.date) : N - 1;
   const st = D.map(ds => listed(ds, det.inv, det.code));
   const upto = st.slice(0, sel + 1);
@@ -934,8 +959,17 @@ function renderDetail() {
     </div>
     <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span><span class="lg"><i style="background:var(--ink-3)"></i>觀察日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
     <div class="dlg-chart"><h3>力度</h3><svg id="cF" role="img" aria-label="近 60 日力度折線圖"></svg></div>
-    <div class="dlg-chart"><h3>收盤價</h3><svg id="cP" role="img" aria-label="近 60 日收盤價折線圖"></svg></div>
-    <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。價格未還原除權息。</p>`;
+    <div class="dlg-chart"><h3>K 線<span class="lg"><i style="background:var(--up);border-radius:2px"></i>收漲</span><span class="lg"><i style="background:var(--down);border-radius:2px"></i>收跌</span></h3>
+      <div class="ma-row" id="maRow">${MAS.map(([n, col]) => { const ok = mas[n].some(v => v !== null); return `<button type="button" class="ma-t" data-ma="${n}" aria-pressed="${ok && maOn.has(n)}"${ok ? "" : ` disabled title="上市櫃天數或資料不足 ${n} 日"`}><i style="background:var(${col})"></i>${n}MA</button>`; }).join("")}</div>
+      <svg id="cP" role="img" aria-label="近 60 日 K 線圖與均線"></svg></div>
+    <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。K 線紅色是收盤高於開盤、綠色是收盤低於開盤；均線是最近 N 個交易日收盤價的平均。價格未還原除權息。</p>`;
+  $("maRow").onclick = ev => {
+    const b = ev.target.closest(".ma-t"); if (!b || b.disabled) return;
+    const n = +b.dataset.ma; maOn.has(n) ? maOn.delete(n) : maOn.add(n);
+    try { localStorage.setItem("cf-ma", JSON.stringify([...maOn])); } catch (e) {}
+    renderDetail();
+    const nb = document.querySelector(`#maRow [data-ma="${n}"]`); if (nb) nb.focus({ preventScroll: true });
+  };
 
   const W = Math.max(280, $("cNet").parentElement.clientWidth), m = { l: 46, r: 10 };
   const step = (W - m.l - m.r) / N, bw = Math.max(1.5, step - 2);
@@ -980,15 +1014,28 @@ function renderDetail() {
     s += `<circle cx="${cx(sel)}" cy="${Y(force[sel])}" r="4" fill="var(--s1)" stroke="var(--surface)" stroke-width="2"/>`;
     finish(svg, s + xlabels(H, bot), H); }
 
-  // 3) 收盤價：折線（缺資料的日子斷開）
-  { const svg = $("cP"), H = 132, top = 10, bot = 20;
-    const vals = close.filter(v => v), lo0 = vals.length ? Math.min(...vals) : 0, hi0 = vals.length ? Math.max(...vals) : 1, pad = (hi0 - lo0) * 0.08 || hi0 * 0.02 || 1;
-    const lo = lo0 - pad, hi = hi0 + pad;
-    const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo0, hi0].filter((v, i, a) => a.indexOf(v) === i), t => price(t));
-    let s = s0, d = "", pen = false;
-    close.forEach((v, i) => { if (v) { d += `${pen ? "L" : "M"}${cx(i)} ${Y(v)}`; pen = true; } else pen = false; });
-    s += `<path d="${d}" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-linejoin="round"/>`;
-    if (close[sel]) s += `<circle cx="${cx(sel)}" cy="${Y(close[sel])}" r="4" fill="var(--ink-2)" stroke="var(--surface)" stroke-width="2"/>`;
+  // 3) K 線＋均線（沒有開高低的日子只畫一條收盤短線；均線缺資料的日子斷開）
+  { const svg = $("cP"), H = 200, top = 10, bot = 20;
+    const on = MAS.filter(([n]) => maOn.has(n) && mas[n].some(v => v !== null));
+    const vals = close.map((v, i) => [hi_[i] || v, lo_[i] || v]).flat().concat(...on.map(([n]) => mas[n])).filter(v => v);
+    const lo0 = vals.length ? Math.min(...vals) : 0, hi0 = vals.length ? Math.max(...vals) : 1, pad = (hi0 - lo0) * 0.06 || hi0 * 0.02 || 1;
+    const { Y, s: s0 } = frame(svg, H, top, bot, lo0 - pad, hi0 + pad, [lo0, (lo0 + hi0) / 2, hi0].filter((v, i, a) => a.indexOf(v) === i), t => price(t));
+    let s = s0;
+    const cw = Math.max(1, Math.min(bw, step * 0.72));
+    close.forEach((c, i) => {
+      if (!c) return;
+      const o = op[i], h = hi_[i], l = lo_[i], x0 = cx(i);
+      if (!o || !h || !l) { s += `<line x1="${x0 - cw / 2}" x2="${x0 + cw / 2}" y1="${Y(c)}" y2="${Y(c)}" stroke="var(--ink-3)" stroke-width="1.5"/>`; return; }
+      const col = c > o ? "var(--up)" : c < o ? "var(--down)" : "var(--ink-2)";
+      const yt = Y(Math.max(o, c)), yb = Y(Math.min(o, c));
+      s += `<line x1="${x0}" x2="${x0}" y1="${Y(h)}" y2="${Y(l)}" stroke="${col}" stroke-width="1"/>`;
+      s += `<rect x="${x0 - cw / 2}" y="${yt}" width="${cw}" height="${Math.max(1, yb - yt)}" fill="${col}"/>`;
+    });
+    on.forEach(([n, col]) => {
+      let d = "", pen = false;
+      mas[n].forEach((v, i) => { if (v) { d += `${pen ? "L" : "M"}${cx(i)} ${Y(v)}`; pen = true; } else pen = false; });
+      s += `<path d="${d}" fill="none" stroke="var(${col})" stroke-width="1.5" stroke-linejoin="round"/>`;
+    });
     finish(svg, s + xlabels(H, bot), H); }
 
   // 十字線＋提示：三張圖同步
@@ -998,7 +1045,9 @@ function renderDetail() {
     const i = Math.max(0, Math.min(N - 1, Math.floor((px - m.l) / step)));
     svgs.forEach(sv => { const l = sv.querySelector(".xh"); l.setAttribute("x1", cx(i)); l.setAttribute("x2", cx(i)); l.setAttribute("visibility", "visible"); });
     const g = i > 0 && close[i] && close[i - 1] ? (close[i] / close[i - 1] - 1) * 100 : null;
-    showTip(`<b>${dlong(D[i])}</b>${st[i] ? `・${LS[st[i]]}` : ""}<br><span class="num">${det.inv} ${net[i] > 0 ? "+" : ""}${fmt(net[i])} 張<br>力度 ${force[i].toFixed(2)}<br>收盤 ${price(close[i])}${g === null ? "" : `（${g > 0 ? "+" : ""}${g.toFixed(2)}%）`}</span>`, ev.clientX, ev.clientY);
+    const ohl = op[i] && hi_[i] && lo_[i] ? `開 ${price(op[i])}・高 ${price(hi_[i])}・低 ${price(lo_[i])}<br>` : "";
+    const maTxt = MAS.filter(([n]) => maOn.has(n) && mas[n][i]).map(([n]) => `${n}MA ${price(mas[n][i])}`).join("・");
+    showTip(`<b>${dlong(D[i])}</b>${st[i] ? `・${LS[st[i]]}` : ""}<br><span class="num">${det.inv} ${net[i] > 0 ? "+" : ""}${fmt(net[i])} 張<br>力度 ${force[i].toFixed(2)}<br>${ohl}收盤 ${price(close[i])}${g === null ? "" : `（${g > 0 ? "+" : ""}${g.toFixed(2)}%）`}${maTxt ? "<br>" + maTxt : ""}</span>`, ev.clientX, ev.clientY);
   };
   const hide = () => { svgs.forEach(sv => sv.querySelector(".xh").setAttribute("visibility", "hidden")); hideTip(); };
   svgs.forEach(sv => { const h = sv.querySelector(".hit"); h.onpointermove = show; h.onpointerdown = show; h.onpointerleave = hide; });

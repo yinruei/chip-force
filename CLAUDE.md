@@ -8,7 +8,7 @@
 - `data/YYYYMMDD.csv` — 每日原始資料快取（全市場法人買賣超＋發行股數），**進版控**，換電腦不用重抓
 - `output/` — 每日結果：`latest_<法人>.md`、`YYYYMMDD_<法人>.md`、`YYYYMMDD_<法人>_顯著買超.csv`
 - `build_dashboard.py` + `dashboard_template.html` — 每天選股後由快取產生單檔視覺化頁面 `output/dashboard.html`（最近 10 個交易日、兩種法人）。改選股參數時，`build_dashboard.py` 的 `PARAMS`／`MODES` 要一起改。
-- `backtest.py` — 回測（訊號隔日開盤進場、持有 1/5/10/20 日收盤出場，扣來回成本，對照同日全市場等權基準）。價量快取 `data/px_YYYYMMDD.csv`；由手動 workflow `.github/workflows/backtest.yml` 執行，報告在 `output/backtest.md`、逐筆在 `output/backtest_trades.csv`、彙總在 `output/backtest_summary.json`（`python backtest.py --report-only` 可不連網重做報告）。`build_dashboard.py` 會把彙總放進視覺化頁面的「回測」分頁。回補有時間預算，中斷後再按一次會接著抓。
+- `backtest.py` — 回測（訊號隔日開盤進場、持有 1/5/10/20 日收盤出場，扣來回成本，對照同日全市場等權基準）。價量快取 `data/px_YYYYMMDD.csv`（開盤、收盤、成交張數、最高、最低；最高最低是 2026-10 加的，給個股明細畫 K 棒，舊快取用 `refill_px.py`／Actions「回補價量（K 棒用）」補，並往前補到約 310 個交易日給 240 日均線用）；由手動 workflow `.github/workflows/backtest.yml` 執行，報告在 `output/backtest.md`、逐筆在 `output/backtest_trades.csv`、彙總在 `output/backtest_summary.json`（`python backtest.py --report-only` 可不連網重做報告）。`build_dashboard.py` 會把彙總放進視覺化頁面的「回測」分頁。回補有時間預算，中斷後再按一次會接著抓。
 - `screenshot.py` — 每天產生頁面後，把上半部（摘要、力度排行、散布圖，含「非投資建議」註記）截成 PNG：`output/screenshots/latest_投信.png`、`latest_外資.png`，以及每天一份 `YYYYMMDD_*.png`（只留最近 30 天），給 Skool 課程用。
 - `METHOD.md` — 選股方法完整說明（內部文件：公式、參數、回測摘要、保密規則）。
 - `site/` — Skool 付費會員專屬網站（Cloudflare Worker + KV）：email 註冊需本月驗證碼、管理者在 `/admin` 核准、每月重新驗證、每帳號最多 2 台裝置。部署由 `.github/workflows/site.yml`，每天 `daily.yml` 會把 `output/dashboard.html` 上傳到 KV。說明見 `site/README.md`。免費方案每個請求只有約 10ms CPU：密碼雜湊用 PBKDF2 1 萬次（舊帳號 10 萬次，登入時自動升級），不要再調高；要檢查網站回應時間、CPU 與錯誤，手動跑 `.github/workflows/site-check.yml`。KV 各地同步約有 1 分鐘延遲，所以會員資料拆成 `user:`（帳密）、`st:`（狀態，只有註冊和管理者寫）、`vm:`（每月驗證）、`ss:`（登入裝置）四個 key（另有 `sk:<Skool 帳號>` → email，讓一個 Skool 帳號只能綁一個 email），各自只由負責的動作寫入；不要再合併成一筆整包寫回，否則會員登入/登出會蓋掉管理者的核准。
@@ -46,6 +46,7 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 ## 2026-10-20 的兩個改動
 - 第二份清單由「三大法人」改成「**外資**」（外資及陸資，含外資自營商）。2026-10-21 起兩份清單都用穩健模式：外資外本比 ≥ 1%、投信投本比 ≥ 0.2%（`build_dashboard.py` 的 `MIN_RATIO`、`daily.yml` 的 `--min-ratio`、`backtest.py` 要一致；回測：外資 1% 以下各區間都輸大盤，投信 0.05% 以下最差、0.2% 以上平均最好）。`build_dashboard.py` 的 `MODES`、`daily.yml`、`backtest.py`、`notify.py`、`screenshot.py`、`social_card.py`、頁面的 `INV` 都要一致。舊的 `output/*_三大法人.md` 留著當紀錄。
 - 觀察名單（DATA 每天每法人的 `watch`）：用靈敏模式、最低比例 0 再篩一次，扣掉 `picks` 與 `strong` 剩下的（力度達標、當天買超、成交量夠，但佔股本比沒到 `MIN_RATIO`）。頁面清單分頁「顯著買超／觀察／買方轉強」、散布圖灰點、`listed()` 回傳 3；不算正式訊號，不進 `add_tags`、上榜通知、本週統整、`lastListed`。
+- **休市日**：法人快取 `data/YYYYMMDD.csv` 在休市日只有標題列（約 60 bytes）。算交易日清單時要排除（`st_size > 200`），否則休市後第一天的漲跌幅會找不到前一天收盤。
 - **上櫃外資／投信／自營以前全是 0**：櫃買中心法人明細欄位名稱只有「買進股數／賣出股數／買賣超股數」重複，`chip_force.parse_tpex_insti` 改成依位置讀（`TPEX_POS`），並檢查外資＋投信＋自營＝三大法人；歷史快取用 `refill_tpex.py`（Actions「回補上櫃法人資料」）補。欄位又改時跑 Actions「檢查資料來源欄位」看結構。
 
 ## 選股頁資料欄位
@@ -54,7 +55,7 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 產業分布：每日選股頁的「產業分布」（右上可切換「官方產業／題材」，`state.indMode`）依目前清單統計 `ind` 或 `th`，點長條或清單的產業標籤設定 `state.ind` 篩選完整清單（換日自動清除）；本週統整與明細也顯示產業。
 本週統整：頁面「看什麼」的「本週統整」分頁完全在前端由 `DATA` 依週（週一～週五）合併，同一檔只列一次、顯示每天上榜狀態與上榜天數；「上榜後漲跌」從該週第一次上榜那天的收盤（DATA 的 `p`）算到週末收盤；整週法人買賣超、週末收盤取自 `series.json`（載入前顯示「…」）。點股票開明細時，明細的日期用該週最後一個交易日（`openDetail(r, ds)`）。研究結果見 `docs/repeat_study.md`：一週上榜次數多，之後並沒有比較強。
 
-個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 外資／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤，約 1MB，不進 git），`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
+個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 外資／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤、`o`/`h`/`l` 開高低（K 棒，缺的日子 null）、`pc` 第一天之前 239 個交易日的收盤（頁面算 5/20/60/120/240MA；展示版截短時 `pc` 不截），約 3–4MB，不進 git）。均線開關記在 localStorage `cf-ma`，`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
 產業觀察圖：`social_card.py` 每天在截圖步驟產生 `output/social/latest_產業觀察.png`（1080×1350，給 Threads／IG），只顯示各產業的顯著買超檔數、不出現個股；產業分類由 `industry.py` 從證交所 ISIN 一覽表（Big5，上市 strMode=2、上櫃 strMode=4）抓，快取 `data/industry.csv`，7 天更新一次。
 法律頁面在 `site/legal.js`（`/terms`、`/privacy`、`/refund`，公開），註冊必須勾選同意，帳號記錄同意的條款版本 `agreed`（＝`TERMS_VERSION`）。
 

@@ -18,6 +18,7 @@ import chip_force as c
 HERE = Path(__file__).resolve().parent
 SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/backtest_summary.json 放回頁面
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
+MA_PRE = 239     # 個股明細的均線：最長 240 日，往前多帶 239 天收盤價
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"外資": "穩健", "投信": "穩健"}   # 2026-10-20 起由三大法人改成外資
 # 穩健模式的最低佔股本比(%)，依法人各自設定（2026-10-21 回測：外資 1% 以下各區間都輸大盤；投信 0.05% 以下最差，0.2% 以上平均最好）
@@ -71,11 +72,21 @@ def row(r: dict, close: dict, prev: dict) -> dict:
 
 def load_close(ds: str) -> dict[str, float]:
     """只讀快取 px_YYYYMMDD.csv 的收盤價；沒有就回傳空的。"""
+    return {k: v[3] for k, v in load_ohlc(ds).items()}
+
+
+def load_ohlc(ds: str) -> dict[str, tuple[float, float, float, float]]:
+    """只讀快取 px_YYYYMMDD.csv：{代號: (開, 高, 低, 收)}，只留有收盤價的。舊快取沒有最高最低價時是 0。"""
     f = c.CACHE / f"px_{ds}.csv"
     if not f.exists():
         return {}
+    out = {}
     with f.open(encoding="utf-8") as fh:
-        return {r["code"]: float(r["close"]) for r in csv.DictReader(fh) if float(r["close"] or 0) > 0}
+        for r in csv.DictReader(fh):
+            cl = float(r["close"] or 0)
+            if cl > 0:
+                out[r["code"]] = (float(r["open"] or 0), float(r.get("high") or 0), float(r.get("low") or 0), cl)
+    return out
 
 
 def add_tags(out: dict) -> None:
@@ -113,8 +124,10 @@ def load_volume_cached(d: dt.date):
 
 
 def build_series(out: dict, latest: dt.date) -> dict:
-    """個股明細（點股票時才載入）：近 KEEP_DAYS 個交易日、曾上榜股票的法人買賣超、力度、收盤價。
-    i／t＝外資／投信買賣超（張），fi／ft＝兩者的力度（i 沿用舊名，以前是三大法人），p＝收盤價；陣列和 d（日期）一一對應。"""
+    """個股明細（點股票時才載入）：近 KEEP_DAYS 個交易日、曾上榜股票的法人買賣超、力度、價格。
+    i／t＝外資／投信買賣超（張），fi／ft＝兩者的力度（i 沿用舊名，以前是三大法人），p＝收盤價，
+    o／h／l＝開盤／最高／最低（畫 K 棒；沒有完整開高低收的日子是 null）；這些陣列和 d（日期）一一對應。
+    pc＝d 第一天之前 MA_PRE 個交易日的收盤價（由舊到新），頁面用來算長天期均線。"""
     w = PARAMS["window"]
     days = c.collect(KEEP_DAYS + w, latest, include_otc=True, deadline=time.time() - 1)
     codes = {r["c"] for e in out["dates"].values() for inv in e for lst in ("picks", "strong", "watch") for r in e[inv].get(lst, [])}
@@ -132,7 +145,12 @@ def build_series(out: dict, latest: dt.date) -> dict:
                 shares[code] = r["shares"]   # 和選股一樣用最新的發行股數
     keep = range(max(w, n - KEEP_DAYS), n)
     ds_keep = [days[i][0].strftime("%Y%m%d") for i in keep]
-    closes = [load_close(ds) for ds in ds_keep]
+    ohlc = [load_ohlc(ds) for ds in ds_keep]
+    # 均線要往前多看的收盤價：交易日 = 有法人資料或價量快取的日子（休市日的法人快取只有標題列，不算）
+    trading = sorted({f.stem for f in c.CACHE.glob("*.csv") if f.stem.isdigit() and len(f.stem) == 8 and f.stat().st_size > 200}
+                     | {f.stem[3:] for f in c.CACHE.glob("px_*.csv")})
+    pre_ds = [ds for ds in trading if ds < ds_keep[0]][-MA_PRE:] if ds_keep else []
+    pre = [load_close(ds) for ds in pre_ds]
     series = {}
     for code in sorted(codes):
         sh = shares.get(code)
@@ -147,7 +165,14 @@ def build_series(out: dict, latest: dt.date) -> dict:
                 fs.append(round((ratio[t] - m) / sd, 2) if sd > 0 else 0.0)
             item[kn] = [round(net[inv][code][t] / 1000) for t in keep]
             item[kf] = fs
-        item["p"] = [cl.get(code) for cl in closes]
+        bars = [x.get(code) for x in ohlc]
+        item["p"] = [b[3] if b else None for b in bars]
+        full = [b if b and min(b) > 0 and b[2] <= min(b[0], b[3]) and b[1] >= max(b[0], b[3]) else None for b in bars]
+        for k, j in (("o", 0), ("h", 1), ("l", 2)):
+            item[k] = [b[j] if b else None for b in full]
+        pc = [x.get(code) for x in pre]
+        if any(pc):
+            item["pc"] = pc
         series[code] = item
     return {"d": ds_keep, "s": series}
 
@@ -159,7 +184,8 @@ def main() -> None:
     have = {f.stem.split("_", 1)[1] for pat in ("vol_*.csv", "px_*.csv") for f in c.CACHE.glob(pat)}
     # 頁面只需要門檻值來畫虛線；其他參數不放進頁面，避免從原始碼看出選股條件
     out = {"params": {"k": p["k"]}, "dates": {}}
-    trading = sorted(f.stem for f in c.CACHE.glob("*.csv") if f.stem.isdigit() and len(f.stem) == 8)
+    # 休市日的法人快取只有標題列，不算交易日（否則休市後第一天的漲跌幅會找不到前一天收盤）
+    trading = sorted(f.stem for f in c.CACHE.glob("*.csv") if f.stem.isdigit() and len(f.stem) == 8 and f.stat().st_size > 200)
     for ds in sorted(have)[-KEEP_DAYS:]:
         d = dt.date(int(ds[:4]), int(ds[4:6]), int(ds[6:]))
         # deadline 設成過去 = 只讀快取、不連網；缺資料的日子就略過
@@ -240,7 +266,8 @@ def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
             demo["dates"][d] = {"locked": True, **{inv: locked_summary(out["dates"][d][inv]) for inv in MODES}}
     codes = {r["c"] for d in keep for e in [out["dates"][d]] for inv in MODES for lst in ("picks", "strong", "watch") for r in e[inv].get(lst, [])}
     n = ser["d"].index(end) + 1 if end in ser["d"] else 0
-    dser = {"d": ser["d"][:n], "s": {k: {f: v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}
+    # pc 是 d 第一天之前的收盤價，不跟著 d 截短
+    dser = {"d": ser["d"][:n], "s": {k: {f: v if f == "pc" else v[:n] for f, v in ser["s"][k].items()} for k in sorted(codes) if k in ser["s"]}}
     note = f"展示版：{end[:4]}-{end[4:6]}-{end[6:]} 以前的資料完整開放，最近的交易日只顯示檔數與產業；付費會員每個交易日 17:30 看到最新完整名單"
     html = html_tpl.replace("資料更新於 __UPDATED__（台北時間）", note)
     html = html.replace("__DATA__", json.dumps(demo, ensure_ascii=False, separators=(",", ":")))

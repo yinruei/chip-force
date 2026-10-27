@@ -33,7 +33,7 @@ import chip_force as c
 HORIZONS = (1, 5, 10, 20)
 INVESTORS = {"外資": "穩健", "投信": "穩健"}
 MIN_RATIO = {"外資": 1.0, "投信": 0.2}   # 與 build_dashboard.py、daily.yml 一致
-PX_FIELDS = ["code", "market", "open", "close", "lots"]
+PX_FIELDS = ["code", "market", "open", "close", "lots", "high", "low"]   # high／low 給個股明細畫 K 棒（2026-10 起）
 
 
 # ----------------------------------------------------------------- 抓價量
@@ -41,11 +41,13 @@ def _px_table(js: dict | None, id_key: str):
     for t in (js or {}).get("tables") or []:
         f = t.get("fields") or []
         ic, io, icl, iv = c._col(f, id_key), c._col(f, "開盤"), c._col(f, "收盤"), c._col(f, "成交股數")
+        ih, il = c._col(f, "最高"), c._col(f, "最低")   # 找不到就記 0，不影響回測
         if None not in (ic, io, icl, iv) and t.get("data"):
             out = {}
             for r in t["data"]:
                 o, cl, v = c._num(r[io]), c._num(r[icl]), c._num(r[iv])
-                out[str(r[ic]).strip()] = (o, cl, v / 1000)
+                h, lo = (c._num(r[ih]), c._num(r[il])) if None not in (ih, il) else (0.0, 0.0)
+                out[str(r[ic]).strip()] = (o, cl, v / 1000, h, lo)
             return out
     return None
 
@@ -60,12 +62,14 @@ def fetch_tpex_px(d: dt.date):
     return _px_table(js, "代號")
 
 
-def load_px(d: dt.date, deadline: float | None):
-    """回傳 {code: (market, open, close, lots)}；沒有資料回傳 None。兩個市場都成功才寫入快取。"""
+def load_px(d: dt.date, deadline: float | None, refresh: bool = False):
+    """回傳 {code: (market, open, close, lots, high, low)}；沒有資料回傳 None。兩個市場都成功才寫入快取。
+    舊快取沒有 high／low 欄，讀出來是 0（refresh=True 會重抓補上）。"""
     p = c.CACHE / f"px_{d:%Y%m%d}.csv"
-    if p.exists():
+    if p.exists() and not refresh:
         with p.open(encoding="utf-8") as fh:
-            return {r["code"]: (r["market"], float(r["open"]), float(r["close"]), float(r["lots"])) for r in csv.DictReader(fh)}
+            return {r["code"]: (r["market"], float(r["open"]), float(r["close"]), float(r["lots"]),
+                                float(r.get("high") or 0), float(r.get("low") or 0)) for r in csv.DictReader(fh)}
     if deadline is not None and time.time() > deadline:
         return None
     print(f"抓取價量 {d} ...", file=sys.stderr)
@@ -83,8 +87,8 @@ def load_px(d: dt.date, deadline: float | None):
         with p.open("w", encoding="utf-8", newline="") as fh:
             w = csv.writer(fh)
             w.writerow(PX_FIELDS)
-            for code, (m, o, cl, lots) in out.items():
-                w.writerow([code, m, o, cl, lots])
+            for code, (m, o, cl, lots, h, lo) in out.items():
+                w.writerow([code, m, o, cl, lots, h, lo])
     return out or None
 
 
