@@ -400,7 +400,7 @@ footer { font-size: 12px; color: var(--ink-3); }
     </section>
   </div>
 
-  <footer>資料來源：證交所、櫃買中心公開法人買賣超與成交資料。依公開資料統計，非投資建議。資料更新於 2026-10-27 21:54（台北時間）。</footer>
+  <footer>資料來源：證交所、櫃買中心公開法人買賣超與成交資料。依公開資料統計，非投資建議。資料更新於 2026-10-27 22:50（台北時間）。</footer>
 </div>
 <div id="dlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
   <div class="dlg-card">
@@ -557,17 +557,17 @@ function weekAgg(w, inv) {
       if (ds >= a.last) { a.last = ds; a.p = r.p; }
     }));
   });
-  // 有明細資料（series.json）時，補上整週的法人買賣超合計與週末收盤
-  if (SER) {
-    const D = SER.d, i0 = D.indexOf(w.ds[0]), i1 = D.indexOf(w.ds[w.ds.length - 1]), kn = SKEY[inv][0];
-    agg.forEach(a => {
-      const x = SER.s[a.c];
-      if (!x || i1 < 0) return;
-      let sum = 0; for (let i = Math.max(0, i0); i <= i1; i++) sum += x[kn][i] || 0;
-      a.wn = i0 >= 0 ? sum : null;
-      if (x.p[i1]) a.p = a.pe = x.p[i1];
-    });
-  }
+  // 有明細資料時，補上整週的法人買賣超合計與週末收盤
+  const kn = SKEY[inv][0];
+  agg.forEach(a => {
+    const src = serOf(a.c), x = src && src.s[a.c];
+    if (!x) return;
+    const D = src.d, i0 = D.indexOf(w.ds[0]), i1 = D.indexOf(w.ds[w.ds.length - 1]);
+    if (i1 < 0) return;
+    let sum = 0; for (let i = Math.max(0, i0); i <= i1; i++) sum += x[kn][i] || 0;
+    a.wn = i0 >= 0 ? sum : null;
+    if (x.p[i1]) a.p = a.pe = x.p[i1];
+  });
   return [...agg.values()];
 }
 
@@ -605,8 +605,11 @@ function renderWeek() {
   const both = picks.filter(a => a.b);
   $("wBoth").textContent = both.length;
   $("wBothSub").textContent = "這週至少有一天投信和外資同時上榜";
+  // 這週的股票分布在哪幾份明細，就只下載那幾份
+  const need = [...new Set(all.map(a => shardOf(a.c)))].filter(k => !SER && !SHD[k]);
+  WREADY = !need.length;
   renderWeekTable(w, picks, strong);
-  if (!SER) loadSeries().then(() => { if (state.view === "week") renderWeek(); }).catch(() => {});
+  if (need.length) Promise.all(need.map(loadShard)).then(() => { if (state.view === "week") renderWeek(); }).catch(() => {});
 }
 
 function renderWeekTable(w, picks, strong) {
@@ -628,7 +631,7 @@ function renderWeekTable(w, picks, strong) {
     if (!f || f.ds === wEnd || !f.p || !end) return null;
     return (end / f.p - 1) * 100;
   };
-  const gainCell = a => { const f = a.first[isP ? 1 : 2]; if (f && f.ds === wEnd) return '<span class="tag">剛上榜</span>'; const g = gain(a); return g === null ? (SER ? "—" : "…") : `${pct(g)}<span class="from">${mdS(f.ds)} 起</span>`; };
+  const gainCell = a => { const f = a.first[isP ? 1 : 2]; if (f && f.ds === wEnd) return '<span class="tag">剛上榜</span>'; const g = gain(a); return g === null ? (WREADY ? "—" : "…") : `${pct(g)}<span class="from">${mdS(f.ds)} 起</span>`; };
   const val = (a, k) => k === "d" ? (isP ? a.dp : a.ds) : k === "f" ? (isP ? a.fp : a.fs) : k === "wg" ? gain(a) : a[k];
   const q = state.wq.trim().toLowerCase();
   let rows = (isP ? picks : strong).filter(a => !q || a.c.includes(q) || a.n.toLowerCase().includes(q));
@@ -642,7 +645,7 @@ function renderWeekTable(w, picks, strong) {
     const t = !have.has(ds) ? "休市或還沒到" : v === 1 ? "顯著買超" : v === 2 ? "買方轉強" : "沒上榜";
     return `<span class="wd ${cls}" title="${mdS(ds)} ${t}">${label}</span>`;
   }).join("")}</span>`;
-  const later = SER ? "—" : "…";
+  const later = WREADY ? "—" : "…";
   $("wBody").innerHTML = rows.length ? rows.map(a => `<tr data-c="${a.c}" tabindex="0"><td class="num">${a.c}</td><td>${mk(a.m)}${a.n}${star(a.c)}${a.b && isP ? '<span class="bdg both">⭐雙榜</span>' : ""}</td><td>${cells(a)}</td><td class="num cnt">${val(a, "d")} / ${w.ds.length}</td><td><span class="tag">${a.ind || "—"}</span>${a.th.map(t => `<span class="thtag" style="cursor:default">${t}</span>`).join("")}</td><td class="num">${val(a, "f").toFixed(2)}<span class="fbar" style="width:${Math.max(2, Math.min(60, val(a, "f") / fmax * 60))}px;${isP ? "" : "background:var(--s2)"}"></span></td><td class="num">${a.wn === null ? later : fmt(a.wn)}</td><td class="num">${gainCell(a)}</td><td class="num">${price(a.p)}</td></tr>`).join("")
     : `<tr><td colspan="9" class="empty">${state.wq ? "找不到符合的股票" : "這週這份清單是空的"}</td></tr>`;
   $("wBody").onclick = ev => { const tr = ev.target.closest("tr[data-c]"); const a = tr && rows.find(x => x.c === tr.dataset.c); if (a) openDetail(a, w.ds[w.ds.length - 1]); };
@@ -799,7 +802,7 @@ $("tbody").onclick = ev => {
 };
 $("tbody").onkeydown = ev => { if (ev.key === "Enter") { const r = rowOf(ev.target.closest("tr[data-c]")); if (r) openDetail(r); } };
 $("q").oninput = ev => { state.q = ev.target.value; renderTable(cur()); };
-let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); if (!$("dlg").hidden && SER) renderDetail(); }, 120); });
+let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(() => { if (state.view === "bt") renderBtChart(); else renderScatter(cur()); if (!$("dlg").hidden && serOf(det.code)) renderDetail(); }, 120); });
 
 /* ---- 回測 ---- */
 const BT_GROUPS = [["顯著買超", "var(--s1)"], ["買方轉強", "var(--s2)"]];
@@ -872,6 +875,14 @@ const SERIES_URL = DATA.demo ? "/demo/series.json" : "series.json";
 const loadSeries = () => serLoading || (serLoading = fetch(SERIES_URL, { credentials: "same-origin" })
   .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
   .then(j => (SER = j)).catch(e => { serLoading = null; throw e; }));
+// 明細只要一檔時，下載它所在的那一份就好（全部約 3MB，一份約 1/16）；算法要和 build_dashboard.py 的 shard_of 一樣
+const SHARDS = 16, SHD = {}, shdLoading = {};
+let WREADY = false;   // 本週統整需要的明細都載入了（還沒好時，表格先顯示「…」）
+const shardOf = c => [...c].reduce((a, ch) => a + ch.charCodeAt(0), 0) % SHARDS;
+const loadShard = k => shdLoading[k] || (shdLoading[k] = fetch(DATA.demo ? `/demo/series/${k}.json` : `series/${k}.json`, { credentials: "same-origin" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(j => (SHD[k] = j)).catch(() => { delete shdLoading[k]; return loadSeries(); }));   // 分份還沒上傳時改抓整份
+const serOf = c => SER && SER.s[c] ? SER : SHD[shardOf(c)] && SHD[shardOf(c)].s[c] ? SHD[shardOf(c)] : SER || SHD[shardOf(c)] || null;
 const SKEY = { "外資": ["i", "fi"], "投信": ["t", "ft"] };
 const det = { code: null, name: "", m: "", inv: null, last: null };
 // 均線：可以選要顯示哪幾條，記在這台裝置
@@ -935,16 +946,19 @@ function renderDetail() {
     b.onclick = () => { det.inv = val; renderDetail(); }; box.appendChild(b);
   });
   const body = $("dlgBody");
-  if (!SER) {
+  const src = serOf(det.code);
+  if (!src) {
     body.innerHTML = '<div class="dlg-msg">載入中…</div>';
-    loadSeries().then(renderDetail).catch(() => { body.innerHTML = '<div class="dlg-msg">明細資料暫時載入失敗，請重新整理後再試一次。</div>'; });
+    const code = det.code;
+    loadShard(shardOf(code)).then(() => { if (det.code === code && !$("dlg").hidden) renderDetail(); })
+      .catch(() => { if (det.code === code) body.innerHTML = '<div class="dlg-msg">明細資料暫時載入失敗，請重新整理後再試一次。</div>'; });
     return;
   }
-  const x = SER.s[det.code];
+  const x = src.s[det.code];
   if (!x) { body.innerHTML = '<div class="dlg-msg">這檔目前沒有明細資料。</div>'; return; }
-  const D = SER.d, N = D.length;
+  const D = src.d, N = D.length;
   const [kn, kf] = SKEY[det.inv];
-  const net = x[kn], force = x[kf], close = x.p, op = x.o || [], hi_ = x.h || [], lo_ = x.l || [];
+  const net = x[kn], force = x[kf], close = x.p, op = x.o || [], hi_ = x.h || [], lo_ = x.l || [], vol = x.v || [];
   const mas = maSeries(x.pc || [], close);
   const sel = D.indexOf(det.date) >= 0 ? D.indexOf(det.date) : N - 1;
   const st = D.map(ds => listed(ds, det.inv, det.code));
@@ -962,6 +976,7 @@ function renderDetail() {
     <div class="dlg-chart"><h3>K 線<span class="lg"><i style="background:var(--up);border-radius:2px"></i>收漲</span><span class="lg"><i style="background:var(--down);border-radius:2px"></i>收跌</span></h3>
       <div class="ma-row" id="maRow">${MAS.map(([n, col]) => { const ok = mas[n].some(v => v !== null); return `<button type="button" class="ma-t" data-ma="${n}" aria-pressed="${ok && maOn.has(n)}"${ok ? "" : ` disabled title="上市櫃天數或資料不足 ${n} 日"`}><i style="background:var(${col})"></i>${n}MA</button>`; }).join("")}</div>
       <svg id="cP" role="img" aria-label="近 60 日 K 線圖與均線"></svg></div>
+    <div class="dlg-chart"><h3>成交量（張）</h3><svg id="cV" role="img" aria-label="近 60 日成交量長條圖"></svg></div>
     <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。K 線紅色是收盤高於開盤、綠色是收盤低於開盤；均線是最近 N 個交易日收盤價的平均。價格未還原除權息。</p>`;
   $("maRow").onclick = ev => {
     const b = ev.target.closest(".ma-t"); if (!b || b.disabled) return;
@@ -1038,7 +1053,22 @@ function renderDetail() {
     });
     finish(svg, s + xlabels(H, bot), H); }
 
-  // 十字線＋提示：三張圖同步
+  // 4) 成交量：顏色跟當天 K 棒（沒有開盤價就和前一天收盤比）
+  { const svg = $("cV"), H = 96, top = 6, bot = 20;
+    const hiV = Math.max(1, ...vol.filter(v => v));
+    const { Y, s: s0 } = frame(svg, H, top, bot, 0, hiV, [0, hiV], compact);
+    let s = s0;
+    const cw = Math.max(1, Math.min(bw, step * 0.72));
+    vol.forEach((v, i) => {
+      if (!v) return;
+      const c = close[i], ref = op[i] || (i > 0 ? close[i - 1] : null);
+      const col = !c || !ref || c === ref ? "var(--ink-3)" : c > ref ? "var(--up)" : "var(--down)";
+      s += `<rect x="${cx(i) - cw / 2}" y="${Y(v)}" width="${cw}" height="${Math.max(0.5, Y(0) - Y(v))}" fill="${col}" opacity=".8"/>`;
+    });
+    s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--ink-3)"/>`;
+    finish(svg, s + xlabels(H, bot), H); }
+
+  // 十字線＋提示：四張圖同步
   const LS = ["", "顯著買超", "買方轉強", "觀察名單"];
   const show = ev => {
     const b = ev.currentTarget.ownerSVGElement.getBoundingClientRect(), px = (ev.clientX - b.left) * W / b.width;
@@ -1047,7 +1077,7 @@ function renderDetail() {
     const g = i > 0 && close[i] && close[i - 1] ? (close[i] / close[i - 1] - 1) * 100 : null;
     const ohl = op[i] && hi_[i] && lo_[i] ? `開 ${price(op[i])}・高 ${price(hi_[i])}・低 ${price(lo_[i])}<br>` : "";
     const maTxt = MAS.filter(([n]) => maOn.has(n) && mas[n][i]).map(([n]) => `${n}MA ${price(mas[n][i])}`).join("・");
-    showTip(`<b>${dlong(D[i])}</b>${st[i] ? `・${LS[st[i]]}` : ""}<br><span class="num">${det.inv} ${net[i] > 0 ? "+" : ""}${fmt(net[i])} 張<br>力度 ${force[i].toFixed(2)}<br>${ohl}收盤 ${price(close[i])}${g === null ? "" : `（${g > 0 ? "+" : ""}${g.toFixed(2)}%）`}${maTxt ? "<br>" + maTxt : ""}</span>`, ev.clientX, ev.clientY);
+    showTip(`<b>${dlong(D[i])}</b>${st[i] ? `・${LS[st[i]]}` : ""}<br><span class="num">${det.inv} ${net[i] > 0 ? "+" : ""}${fmt(net[i])} 張<br>力度 ${force[i].toFixed(2)}<br>${ohl}收盤 ${price(close[i])}${g === null ? "" : `（${g > 0 ? "+" : ""}${g.toFixed(2)}%）`}${vol[i] ? `<br>成交 ${fmt(vol[i])} 張` : ""}${maTxt ? "<br>" + maTxt : ""}</span>`, ev.clientX, ev.clientY);
   };
   const hide = () => { svgs.forEach(sv => sv.querySelector(".xh").setAttribute("visibility", "hidden")); hideTip(); };
   svgs.forEach(sv => { const h = sv.querySelector(".hit"); h.onpointermove = show; h.onpointerdown = show; h.onpointerleave = hide; });
