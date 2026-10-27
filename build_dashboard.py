@@ -19,6 +19,21 @@ HERE = Path(__file__).resolve().parent
 SHOW_BACKTEST = False   # 回測分頁先拿掉；改成 True 就會把 output/backtest_summary.json 放回頁面
 KEEP_DAYS = 60   # 頁面預設只顯示最近 10 天，更早的由使用者按「更早」展開
 MA_PRE = 239     # 個股明細的均線：最長 240 日，往前多帶 239 天收盤價
+SHARDS = 16      # 個股明細切成幾份：點一檔只下載那一份（頁面的 shardOf 要用同樣的算法）
+
+
+def shard_of(code: str) -> int:
+    return sum(ord(ch) for ch in code) % SHARDS
+
+
+def write_shards(ser: dict, folder: Path) -> None:
+    """series 依代號切成 SHARDS 份（folder/0.json…），每份都帶 d；沒有股票的份也寫，網站上才不會留舊的。"""
+    folder.mkdir(parents=True, exist_ok=True)
+    parts: list[dict] = [{} for _ in range(SHARDS)]
+    for code, item in ser["s"].items():
+        parts[shard_of(code)][code] = item
+    for k, part in enumerate(parts):
+        (folder / f"{k}.json").write_text(json.dumps({"d": ser["d"], "s": part}, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 PARAMS = {"window": 60, "k": 2.0, "confirm": 1, "min_ratio": 0.05, "min_volume": 1000, "fast": 20, "slow": 60}
 MODES = {"外資": "穩健", "投信": "穩健"}   # 2026-10-20 起由三大法人改成外資
 # 穩健模式的最低佔股本比(%)，依法人各自設定（2026-10-21 回測：外資 1% 以下各區間都輸大盤；投信 0.05% 以下最差，0.2% 以上平均最好）
@@ -75,8 +90,8 @@ def load_close(ds: str) -> dict[str, float]:
     return {k: v[3] for k, v in load_ohlc(ds).items()}
 
 
-def load_ohlc(ds: str) -> dict[str, tuple[float, float, float, float]]:
-    """只讀快取 px_YYYYMMDD.csv：{代號: (開, 高, 低, 收)}，只留有收盤價的。舊快取沒有最高最低價時是 0。"""
+def load_ohlc(ds: str) -> dict[str, tuple[float, float, float, float, float]]:
+    """只讀快取 px_YYYYMMDD.csv：{代號: (開, 高, 低, 收, 成交張數)}，只留有收盤價的。舊快取沒有最高最低價時是 0。"""
     f = c.CACHE / f"px_{ds}.csv"
     if not f.exists():
         return {}
@@ -85,7 +100,7 @@ def load_ohlc(ds: str) -> dict[str, tuple[float, float, float, float]]:
         for r in csv.DictReader(fh):
             cl = float(r["close"] or 0)
             if cl > 0:
-                out[r["code"]] = (float(r["open"] or 0), float(r.get("high") or 0), float(r.get("low") or 0), cl)
+                out[r["code"]] = (float(r["open"] or 0), float(r.get("high") or 0), float(r.get("low") or 0), cl, float(r["lots"] or 0))
     return out
 
 
@@ -126,7 +141,7 @@ def load_volume_cached(d: dt.date):
 def build_series(out: dict, latest: dt.date) -> dict:
     """個股明細（點股票時才載入）：近 KEEP_DAYS 個交易日、曾上榜股票的法人買賣超、力度、價格。
     i／t＝外資／投信買賣超（張），fi／ft＝兩者的力度（i 沿用舊名，以前是三大法人），p＝收盤價，
-    o／h／l＝開盤／最高／最低（畫 K 棒；沒有完整開高低收的日子是 null）；這些陣列和 d（日期）一一對應。
+    o／h／l＝開盤／最高／最低（畫 K 棒；沒有完整開高低收的日子是 null）、v＝成交張數；這些陣列和 d（日期）一一對應。
     pc＝d 第一天之前 MA_PRE 個交易日的收盤價（由舊到新），頁面用來算長天期均線。"""
     w = PARAMS["window"]
     days = c.collect(KEEP_DAYS + w, latest, include_otc=True, deadline=time.time() - 1)
@@ -167,9 +182,10 @@ def build_series(out: dict, latest: dt.date) -> dict:
             item[kf] = fs
         bars = [x.get(code) for x in ohlc]
         item["p"] = [b[3] if b else None for b in bars]
-        full = [b if b and min(b) > 0 and b[2] <= min(b[0], b[3]) and b[1] >= max(b[0], b[3]) else None for b in bars]
+        full = [b if b and min(b[:4]) > 0 and b[2] <= min(b[0], b[3]) and b[1] >= max(b[0], b[3]) else None for b in bars]
         for k, j in (("o", 0), ("h", 1), ("l", 2)):
             item[k] = [b[j] if b else None for b in full]
+        item["v"] = [round(b[4]) if b else None for b in bars]
         pc = [x.get(code) for x in pre]
         if any(pc):
             item["pc"] = pc
@@ -227,7 +243,8 @@ def main() -> None:
     last = max(out["dates"])
     ser = build_series(out, dt.date(int(last[:4]), int(last[4:6]), int(last[6:])))
     (c.OUT / "series.json").write_text(json.dumps(ser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"series.json：{len(ser['s'])} 檔、{len(ser['d'])} 天")
+    write_shards(ser, c.OUT / "series")
+    print(f"series.json：{len(ser['s'])} 檔、{len(ser['d'])} 天（另切成 {SHARDS} 份 output/series/）")
     print(f"dashboard.html：{', '.join(out['dates'])}")
     build_demo(out, ser, html_tpl=(HERE / "dashboard_template.html").read_text(encoding="utf-8"))
 
@@ -273,6 +290,7 @@ def build_demo(out: dict, ser: dict, html_tpl: str) -> None:
     html = html.replace("__DATA__", json.dumps(demo, ensure_ascii=False, separators=(",", ":")))
     (c.OUT / "demo.html").write_text(html, encoding="utf-8")
     (c.OUT / "demo_series.json").write_text(json.dumps(dser, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    write_shards(dser, c.OUT / "demo_series")
     locked = sorted(d for d in demo["dates"] if d > end)
     print(f"demo.html：{keep[0]} ～ {end}，明細 {len(dser['s'])} 檔；上鎖 {', '.join(locked)}")
 

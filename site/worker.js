@@ -19,6 +19,7 @@
 //   vapid          推播金鑰（第一次有人開通知時自動產生；notify.py 用它簽名）
 //   notified       上次送出追蹤通知的交易日（notify.py 寫入，避免重複通知）
 //   demo、demo_series  展示版頁面與明細（延遲約一個月的資料）
+//   ser:N、demo_ser:N  個股明細切成 16 份（N＝代號字元碼總和 % 16），點一檔只下載那一份
 //
 // Secrets：SITE_SECRET（產生每月驗證碼）、ADMIN_PASSWORD（管理頁密碼）
 // 選填：RESEND_API_KEY + ADMIN_EMAIL（有人註冊時寄信通知管理者）
@@ -639,12 +640,13 @@ function guidePage(env) {
   </ul>
 
   <h2 id="detail">個股明細</h2>
-  <p>點清單、力度排行或散布圖上的任一檔，就會打開明細（第一次會載入一兩秒）：</p>
+  <p>點清單、力度排行或散布圖上的任一檔，就會打開明細（第一次會載入一下）：</p>
   <ul>
     <li><b>上榜統計</b>：近 10 日上榜次數、近 60 日上榜次數、目前連續上榜天數、雙榜天數。</li>
     <li><b>法人買賣超</b>：近 60 個交易日的長條圖，紅色是買超、綠色是賣超；上方的圓點是上榜的日子（藍＝顯著買超、橘＝買方轉強）。</li>
     <li><b>力度走勢</b>：虛線是顯著門檻，看力度是突然衝高還是慢慢升溫。</li>
     <li><b>K 線</b>：每根代表一天，紅色是收盤高於開盤、綠色是收盤低於開盤，上下的細線是當天最高、最低價。上方的 5MA、20MA、60MA、120MA、240MA 可以點選要不要顯示（會記在這台裝置）；均線是最近 N 個交易日收盤價的平均，上市櫃天數不夠的股票，長天期均線會無法選。價格未還原除權息。</li>
+    <li><b>成交量</b>：K 線下面的長條，顏色跟當天 K 棒一樣（紅漲綠跌），看法人買的那幾天量有沒有放大。</li>
     <li>可以在明細裡切換投信／外資；滑過或點圖表可以看每天的數字。按 ✕、Esc 或點旁邊空白處關閉。</li>
   </ul>
 
@@ -935,6 +937,11 @@ export default {
       const js = env.DEMO === "off" ? null : await env.SITE_KV.get("demo_series");
       return new Response(js || "{}", { status: js ? 200 : 404, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
     }
+    const dsh = path.match(/^\/demo\/series\/(\d{1,2})\.json$/);
+    if (dsh) {
+      const js = env.DEMO === "off" ? null : await env.SITE_KV.get(`demo_ser:${+dsh[1]}`);
+      return new Response(js || "{}", { status: js ? 200 : 404, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "public, max-age=3600" } });
+    }
     const legal = { "/terms": ["服務條款", termsBody], "/privacy": ["隱私權政策", privacyBody], "/refund": ["退款規則", refundBody] }[path];
     if (legal) return page(legal[0], `${legal[1]()}<p class="small" style="margin-top:24px">${LEGAL_LINKS}・<a href="/guide">使用說明</a>・<a href="/">回到網站</a></p>`, { wide: true });
 
@@ -953,6 +960,13 @@ export default {
     // 個股明細資料：和選股頁一樣，要已開通且完成本月驗證
     if (path === "/series.json") {
       const js = await env.SITE_KV.get("series");
+      if (!js) return new Response("{}", { status: 404, headers: { "Content-Type": "application/json" } });
+      return new Response(js, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=600" } });
+    }
+    // 個股明細的其中一份（頁面依代號算出是第幾份，點一檔只下載那一份）
+    const sh = path.match(/^\/series\/(\d{1,2})\.json$/);
+    if (sh) {
+      const js = await env.SITE_KV.get(`ser:${+sh[1]}`);
       if (!js) return new Response("{}", { status: 404, headers: { "Content-Type": "application/json" } });
       return new Response(js, { headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "private, max-age=600" } });
     }

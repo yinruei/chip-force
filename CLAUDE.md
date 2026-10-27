@@ -55,7 +55,7 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 產業分布：每日選股頁的「產業分布」（右上可切換「官方產業／題材」，`state.indMode`）依目前清單統計 `ind` 或 `th`，點長條或清單的產業標籤設定 `state.ind` 篩選完整清單（換日自動清除）；本週統整與明細也顯示產業。
 本週統整：頁面「看什麼」的「本週統整」分頁完全在前端由 `DATA` 依週（週一～週五）合併，同一檔只列一次、顯示每天上榜狀態與上榜天數；「上榜後漲跌」從該週第一次上榜那天的收盤（DATA 的 `p`）算到週末收盤；整週法人買賣超、週末收盤取自 `series.json`（載入前顯示「…」）。點股票開明細時，明細的日期用該週最後一個交易日（`openDetail(r, ds)`）。研究結果見 `docs/repeat_study.md`：一週上榜次數多，之後並沒有比較強。
 
-個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 外資／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤、`o`/`h`/`l` 開高低（K 棒，缺的日子 null）、`pc` 第一天之前 239 個交易日的收盤（頁面算 5/20/60/120/240MA；展示版截短時 `pc` 不截），約 3–4MB，不進 git）。均線開關記在 localStorage `cf-ma`，`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
+個股明細：`build_dashboard.py` 另外產生 `output/series.json`（近 60 交易日、曾上榜股票的 `i`/`t` 外資／投信買賣超張數、`fi`/`ft` 力度、`p` 收盤、`o`/`h`/`l` 開高低（K 棒，缺的日子 null）、`pc` 第一天之前 239 個交易日的收盤（頁面算 5/20/60/120/240MA；展示版截短時 `pc` 不截）、`v` 成交張數，約 3–4MB，不進 git）。均線開關記在 localStorage `cf-ma`。另外依代號切成 16 份 `output/series/N.json`（`shard_of`＝代號字元碼總和 % 16，頁面 `shardOf` 同算法），上傳到 KV `ser:N`（展示版 `demo_ser:N`），Worker 的 `/series/N.json`、`/demo/series/N.json` 提供；個股明細只下載那一檔所在的一份（約 100KB 壓縮後，整份約 1.2MB），本週統整只下載那週股票所在的幾份；分份抓不到時退回整份 `series.json`，`site/upload.sh` 上傳到 KV key `series`，Worker 的 `/series.json`（需登入且本月已驗證）提供，頁面點股票時才載入。
 產業觀察圖：`social_card.py` 每天在截圖步驟產生 `output/social/latest_產業觀察.png`（1080×1350，給 Threads／IG），只顯示各產業的顯著買超檔數、不出現個股；產業分類由 `industry.py` 從證交所 ISIN 一覽表（Big5，上市 strMode=2、上櫃 strMode=4）抓，快取 `data/industry.csv`，7 天更新一次。
 法律頁面在 `site/legal.js`（`/terms`、`/privacy`、`/refund`，公開），註冊必須勾選同意，帳號記錄同意的條款版本 `agreed`（＝`TERMS_VERSION`）。
 

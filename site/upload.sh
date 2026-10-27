@@ -29,6 +29,18 @@ if [ -f output/series.json ]; then
     "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/series" > /dev/null
   echo "已上傳 series.json 到會員網站"
 fi
+# 個股明細分成 16 份（點一檔只下載那一份）：output/series/N.json → ser:N、output/demo_series/N.json → demo_ser:N
+for pair in "series:ser" "demo_series:demo_ser"; do
+  dir="output/${pair%%:*}"; prefix="${pair##*:}"; n=0
+  [ -d "$dir" ] || continue
+  for f in "$dir"/*.json; do
+    k=$(basename "$f" .json)
+    curl -fsS -X PUT -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" --data-binary @"$f" \
+      "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/storage/kv/namespaces/${ID}/values/${prefix}:${k}" > /dev/null
+    n=$((n + 1))
+  done
+  echo "已上傳 ${dir} 共 ${n} 份到會員網站（${prefix}:N）"
+done
 # 展示版（/demo，不用登入；用延遲的舊資料）
 for pair in "demo.html:demo" "demo_series.json:demo_series"; do
   f="output/${pair%%:*}"; key="${pair##*:}"
