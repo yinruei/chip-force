@@ -145,7 +145,7 @@ tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; 
 
 /* 個股明細 */
 .dlg { position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / .45); display: flex; align-items: flex-start; justify-content: center; padding: 24px 12px; overflow-y: auto; }
-.dlg-card { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 760px; padding: 18px 18px 14px; display: flex; flex-direction: column; gap: 12px; }
+.dlg-card { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; width: 100%; max-width: 760px; padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 10px; }
 .dlg-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .dlg-head h2 { font-size: 20px; }
 .dlg-head .sub { font-size: 13px; color: var(--ink-2); margin-top: 2px; }
@@ -165,10 +165,11 @@ tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; 
 .chip.p2 { background: var(--s2-soft); border-color: var(--s2); color: var(--s2); }
 @media (max-width: 560px) { .wl-row { grid-template-columns: 1fr auto auto 28px; } .wl-last { display: none; } }
 .xbtn { font: inherit; font-size: 18px; line-height: 1; background: transparent; border: 1px solid var(--line); color: var(--ink-2); border-radius: 8px; width: 34px; height: 34px; cursor: pointer; flex: none; }
-.dlg-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
-.dlg-stats > div { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-width: 0; }
-.dlg-stats .k { font-size: 11.5px; color: var(--ink-3); }
-.dlg-stats .v { font-family: var(--font-num); font-size: 18px; font-weight: 500; }
+/* 上榜統計縮成一排小格，讓 K 線、成交量、法人買賣超一個畫面看得到 */
+.dlg-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.dlg-stats > div { border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; min-width: 0; display: flex; align-items: baseline; justify-content: space-between; gap: 6px; }
+.dlg-stats .k { font-size: 11.5px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dlg-stats .v { font-family: var(--font-num); font-size: 14px; font-weight: 500; white-space: nowrap; }
 .dlg-chart h3 { font-size: 13px; font-weight: 500; color: var(--ink-2); margin-bottom: 2px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
 .dlg-chart h3 .lg { font-weight: 400; font-size: 12px; color: var(--ink-3); display: inline-flex; align-items: center; gap: 5px; }
 .dlg-chart h3 .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
@@ -184,7 +185,7 @@ tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; 
 .dlg-note { font-size: 12px; color: var(--ink-3); margin: 0; }
 .dlg-msg { padding: 28px 8px; text-align: center; color: var(--ink-3); }
 body.noscroll { overflow: hidden; }
-@media (max-width: 560px) { .dlg { padding: 0; } .dlg-card { border-radius: 0; min-height: 100%; border: 0; } .dlg-stats { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .dlg { padding: 0; } .dlg-card { border-radius: 0; min-height: 100%; border: 0; } .dlg-stats { gap: 4px; } .dlg-stats > div { flex-direction: column; align-items: flex-start; gap: 0; padding: 3px 6px; } .dlg-stats .k { font-size: 10.5px; max-width: 100%; } }
 .mkt-otc { background: var(--s2-soft); }
 input[type="search"] { font: inherit; font-size: 13px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; width: 200px; max-width: 100%; }
 .fbar { display: inline-block; height: 6px; background: var(--s1); border-radius: 0 3px 3px 0; margin-left: 8px; vertical-align: middle; }
@@ -968,8 +969,8 @@ function renderDetail() {
   body.innerHTML = `<div class="dlg-stats">
       <div><div class="k">近 10 日上榜</div><div class="v">${upto.slice(-10).filter(v => v === 1).length} 次</div></div>
       <div><div class="k">近 60 日上榜</div><div class="v">${upto.filter(v => v === 1).length} 次</div></div>
-      <div><div class="k">目前連續上榜</div><div class="v">${streak} 日</div></div>
-      <div><div class="k">雙榜天數（60 日）</div><div class="v">${both} 天</div></div>
+      <div><div class="k">連續上榜</div><div class="v">${streak} 日</div></div>
+      <div><div class="k" title="近 60 日投信和外資同一天都上榜的天數">雙榜天數</div><div class="v">${both} 天</div></div>
     </div>
     <div class="dlg-chart"><h3>K 線<span class="lg"><i style="background:var(--up);border-radius:2px"></i>收漲</span><span class="lg"><i style="background:var(--down);border-radius:2px"></i>收跌</span></h3>
       <div class="ma-row" id="maRow">${MAS.map(([n, col]) => { const ok = mas[n].some(v => v !== null); return `<button type="button" class="ma-t" data-ma="${n}" aria-pressed="${ok && maOn.has(n)}"${ok ? "" : ` disabled title="上市櫃天數或資料不足 ${n} 日"`}><i style="background:var(${col})"></i>${n}MA</button>`; }).join("")}</div>
@@ -1003,7 +1004,7 @@ function renderDetail() {
   const finish = (svg, s, H) => { svg.innerHTML = s + `<line class="xh" y1="0" y2="${H}" stroke="var(--ink-2)" stroke-width="1" visibility="hidden"/><rect class="hit" x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent"/>`; svgs.push(svg); };
 
   // 1) 法人買賣超：長條＋上方的上榜標記（一張圖一個 y 軸）
-  { const svg = $("cNet"), H = 168, top = 20, bot = 20;
+  { const svg = $("cNet"), H = 128, top = 18, bot = 20;
     const lo = Math.min(0, ...net), hi = Math.max(0, ...net);
     const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo, 0, hi].filter((v, i, a) => a.indexOf(v) === i), compact);
     let s = s0;
@@ -1021,7 +1022,7 @@ function renderDetail() {
     finish(svg, s + xlabels(H, bot), H); }
 
   // 2) 力度：折線＋顯著門檻虛線
-  { const svg = $("cF"), H = 132, top = 10, bot = 20;
+  { const svg = $("cF"), H = 110, top = 10, bot = 20;
     const lo = Math.min(0, Math.floor(Math.min(...force))), hi = Math.max(P.k + 1, Math.ceil(Math.max(...force)));
     const { Y, s: s0 } = frame(svg, H, top, bot, lo, hi, [lo, 0, P.k, hi].filter((v, i, a) => a.indexOf(v) === i), t => t);
     let s = s0 + `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(P.k)}" y2="${Y(P.k)}" stroke="var(--ink-2)" stroke-dasharray="5 4"/><text class="lbl" x="${m.l + 4}" y="${Y(P.k) - 4}">顯著門檻</text>`;
@@ -1030,7 +1031,7 @@ function renderDetail() {
     finish(svg, s + xlabels(H, bot), H); }
 
   // 3) K 線＋均線（沒有開高低的日子只畫一條收盤短線；均線缺資料的日子斷開）
-  { const svg = $("cP"), H = 200, top = 10, bot = 20;
+  { const svg = $("cP"), H = 176, top = 8, bot = 6;   // 日期標在下面的成交量圖
     const on = MAS.filter(([n]) => maOn.has(n) && mas[n].some(v => v !== null));
     const vals = close.map((v, i) => [hi_[i] || v, lo_[i] || v]).flat().concat(...on.map(([n]) => mas[n])).filter(v => v);
     const lo0 = vals.length ? Math.min(...vals) : 0, hi0 = vals.length ? Math.max(...vals) : 1, pad = (hi0 - lo0) * 0.06 || hi0 * 0.02 || 1;
@@ -1051,10 +1052,10 @@ function renderDetail() {
       mas[n].forEach((v, i) => { if (v) { d += `${pen ? "L" : "M"}${cx(i)} ${Y(v)}`; pen = true; } else pen = false; });
       s += `<path d="${d}" fill="none" stroke="var(${col})" stroke-width="1.5" stroke-linejoin="round"/>`;
     });
-    finish(svg, s + xlabels(H, bot), H); }
+    finish(svg, s, H); }
 
   // 4) 成交量：顏色跟當天 K 棒（沒有開盤價就和前一天收盤比）
-  { const svg = $("cV"), H = 96, top = 6, bot = 20;
+  { const svg = $("cV"), H = 76, top = 4, bot = 20;
     const hiV = Math.max(1, ...vol.filter(v => v));
     const { Y, s: s0 } = frame(svg, H, top, bot, 0, hiV, [0, hiV], compact);
     let s = s0;
