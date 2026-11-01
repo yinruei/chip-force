@@ -400,7 +400,7 @@ footer { font-size: 12px; color: var(--ink-3); }
     </section>
   </div>
 
-  <footer>資料來源：證交所、櫃買中心公開法人買賣超與成交資料。依公開資料統計，非投資建議。資料更新於 2026-10-30 17:33（台北時間）。</footer>
+  <footer>資料來源：證交所、櫃買中心公開法人買賣超與成交資料。依公開資料統計，非投資建議。資料更新於 2026-11-01 20:32（台北時間）。</footer>
 </div>
 <div id="dlg" class="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
   <div class="dlg-card">
@@ -971,12 +971,12 @@ function renderDetail() {
       <div><div class="k">目前連續上榜</div><div class="v">${streak} 日</div></div>
       <div><div class="k">雙榜天數（60 日）</div><div class="v">${both} 天</div></div>
     </div>
-    <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span><span class="lg"><i style="background:var(--ink-3)"></i>觀察日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
-    <div class="dlg-chart"><h3>力度</h3><svg id="cF" role="img" aria-label="近 60 日力度折線圖"></svg></div>
     <div class="dlg-chart"><h3>K 線<span class="lg"><i style="background:var(--up);border-radius:2px"></i>收漲</span><span class="lg"><i style="background:var(--down);border-radius:2px"></i>收跌</span></h3>
       <div class="ma-row" id="maRow">${MAS.map(([n, col]) => { const ok = mas[n].some(v => v !== null); return `<button type="button" class="ma-t" data-ma="${n}" aria-pressed="${ok && maOn.has(n)}"${ok ? "" : ` disabled title="上市櫃天數或資料不足 ${n} 日"`}><i style="background:var(${col})"></i>${n}MA</button>`; }).join("")}</div>
       <svg id="cP" role="img" aria-label="近 60 日 K 線圖與均線"></svg></div>
     <div class="dlg-chart"><h3>成交量（張）</h3><svg id="cV" role="img" aria-label="近 60 日成交量長條圖"></svg></div>
+    <div class="dlg-chart"><h3>${INV.find(i => i[0] === det.inv)[1]}買賣超（張）<span class="lg"><i style="background:var(--up)"></i>買超</span><span class="lg"><i style="background:var(--down)"></i>賣超</span><span class="lg"><i style="background:var(--s1)"></i>顯著買超日</span><span class="lg"><i style="background:var(--s2)"></i>買方轉強日</span><span class="lg"><i style="background:var(--ink-3)"></i>觀察日</span></h3><svg id="cNet" role="img" aria-label="近 60 日法人買賣超長條圖"></svg></div>
+    <div class="dlg-chart"><h3>力度</h3><svg id="cF" role="img" aria-label="近 60 日力度折線圖"></svg></div>
     <p class="dlg-note">近 ${N} 個交易日（${md(D[0])}～${md(D[N - 1])}）。灰底是目前選的日期；滑過或點圖表可以看每天的數字。K 線紅色是收盤高於開盤、綠色是收盤低於開盤；均線是最近 N 個交易日收盤價的平均。價格未還原除權息。</p>`;
   $("maRow").onclick = ev => {
     const b = ev.target.closest(".ma-t"); if (!b || b.disabled) return;
