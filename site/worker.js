@@ -210,7 +210,7 @@ async function isAdmin(env, req) {
 
 // ---------- 版面 ----------
 const STYLE = `
-:root{--bg:#f3f4f5;--surface:#fcfcfb;--ink:#0f1112;--ink-2:#4a4f53;--ink-3:#7a8085;--line:#dfe2e4;--accent:#2a78d6;--bad:#b42318;--ok:#1a7f37}
+:root{--bg:#f3f4f5;--surface:#fcfcfb;--ink:#0f1112;--ink-2:#4a4f53;--ink-3:#666c71;--line:#dfe2e4;--accent:#1f63b8;--bad:#b42318;--ok:#1a7f37}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#101213;--surface:#1a1a19;--ink:#f2f3f3;--ink-2:#bcc1c4;--ink-3:#8b9196;--line:#2c2f31;--accent:#3987e5;--bad:#f97066;--ok:#4ac26b;color-scheme:dark}}
 :root[data-theme="dark"]{--bg:#101213;--surface:#1a1a19;--ink:#f2f3f3;--ink-2:#bcc1c4;--ink-3:#8b9196;--line:#2c2f31;--accent:#3987e5;--bad:#f97066;--ok:#4ac26b;color-scheme:dark}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 "Noto Sans TC",system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;padding:32px 16px}
@@ -233,10 +233,32 @@ h2{font-size:17px;margin:26px 0 6px}ul,ol{padding-left:1.3em;color:var(--ink-2);
 .row{display:flex;gap:6px;flex-wrap:wrap}form.inline{display:inline}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
 .card{border:1px solid var(--line);border-radius:10px;padding:14px}
+.topbar{max-width:420px;margin:-20px auto 10px;display:flex;justify-content:flex-end}.topbar.wide{max-width:960px}
+.theme{display:inline-flex;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px;gap:2px}
+.theme button{display:inline-flex;align-items:center;gap:5px;background:transparent;color:var(--ink-2);padding:4px 10px;border-radius:6px;font-size:13px;font-weight:400}
+.theme button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:500}.theme svg{width:15px;height:15px}
+@media (max-width:560px){.theme .tl{display:none}}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+html.theme-anim,html.theme-anim *{transition:background-color .2s ease,color .2s ease,border-color .2s ease!important}
 `;
+// 主題切換（淺色／深色／系統）：和 dashboard_template.html 的 THEMES／applyTheme 同一套規則，都存在 localStorage cf-theme。
+// 頁首的 THEME_INIT 在畫面出現前套用（不閃）；沒選過＝系統，CSS 的 prefers-color-scheme 會即時跟著系統變
+const THEME_INIT = `<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script>`;
+const THEME_UI = `<div class="theme" id="themeSeg" role="group" aria-label="顯示主題">
+<button type="button" data-t="light"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg><span class="tl">淺色</span></button>
+<button type="button" data-t="dark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg><span class="tl">深色</span></button>
+<button type="button" data-t="system"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg><span class="tl">系統</span></button>
+</div><script>(function(){var box=document.getElementById("themeSeg"),root=document.documentElement,sys=matchMedia("(prefers-color-scheme: dark)"),cur;
+function read(){try{var v=localStorage.getItem("cf-theme");return v==="light"||v==="dark"?v:"system"}catch(e){return "system"}}
+function paint(){[].forEach.call(box.querySelectorAll("button"),function(b){var t=b.dataset.t;b.setAttribute("aria-pressed",String(t===cur));b.title=t==="system"?"跟著系統（目前是"+(sys.matches?"深色":"淺色")+"）":(t==="light"?"淺色":"深色")+"模式";b.setAttribute("aria-label",b.title)})}
+function apply(t,anim){clearTimeout(apply.tm);if(anim&&!matchMedia("(prefers-reduced-motion: reduce)").matches){root.classList.add("theme-anim");apply.tm=setTimeout(function(){root.classList.remove("theme-anim")},260)}else root.classList.remove("theme-anim");
+if(t==="system")delete root.dataset.theme;else root.dataset.theme=t;cur=t;paint()}
+box.onclick=function(ev){var b=ev.target.closest("button[data-t]");if(!b)return;apply(b.dataset.t,true);try{localStorage.setItem("cf-theme",b.dataset.t)}catch(e){}};
+sys.addEventListener&&sys.addEventListener("change",paint);addEventListener("storage",function(ev){if(ev.key==="cf-theme")apply(read(),true)});cur=read();paint()})()</script>`;
+
 function page(title, body, { wide = false, status = 200 } = {}) {
   return new Response(
-    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script><title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
+    `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}${THEME_INIT}<title>${esc(title)}｜籌碼力度選股</title><style>${STYLE}</style></head><body><div class="topbar${wide ? " wide" : ""}">${THEME_UI}</div><div class="box${wide ? " wide" : ""}">${body}</div></body></html>`,
     { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" } }
   );
 }
@@ -519,7 +541,7 @@ async function handleVerify(req, env, ip, cu) {
 async function serveDashboard(env, cu) {
   const html = await env.SITE_KV.get("dashboard");
   if (!html) return statusPage("頁面準備中", "今天的資料還沒上傳，請稍後再來。", cu.user.email);
-  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:#7a8085"><a href="/guide" style="color:inherit">使用說明</a><a href="/terms" style="color:inherit">條款</a>${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
+  const bar = `<div style="font:13px system-ui,sans-serif;display:flex;justify-content:flex-end;gap:12px;padding:8px 16px;color:var(--ink-3,#666c71)"><a href="/guide" style="color:inherit">使用說明</a><a href="/terms" style="color:inherit">條款</a>${esc(cu.user.email)}<a href="/logout" style="color:inherit">登出</a></div>`;
   return dashboardDoc(html, bar);
 }
 
@@ -541,7 +563,7 @@ function dashboardDoc(html, bar) {
   // dashboard.html 是不含 <html>/<body> 的頁面片段（原本給 Artifact 用），這裡補上完整骨架
   const doc = /<!doctype/i.test(html)
     ? html.replace(/<body([^>]*)>/i, (m) => m + bar)
-    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}<script>try{var t=localStorage.getItem("cf-theme");if(t==="dark"||t==="light")document.documentElement.dataset.theme=t}catch(e){}</script><style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
+    : `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">${APP_HEAD}${THEME_INIT}<style>body{margin:0}[hidden]{display:none!important}</style></head><body>${bar}${html}</body></html>`;
   return new Response(doc, {
     headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY" },
   });
@@ -590,7 +612,7 @@ function guidePage(env) {
   <ul>
     <li><b>交易日</b>：預設顯示最近 10 個交易日，按「更早」可以看更早以前的（最多 60 天）。</li>
     <li><b>看哪個法人</b>：切換「投信（投本比）」或「外資（外本比）」。兩邊都是用佔股本比計算，只是看的法人不同。</li>
-    <li><b>白天／夜晚</b>：右上「顯示」可以切換，會記住你的選擇；沒選過的話會跟著手機或電腦的設定。</li>
+    <li><b>淺色／深色／系統</b>：頁面上方的「主題」可以切換（☀️ 淺色、🌙 深色、💻 系統）。選「系統」會跟著手機或電腦的外觀設定即時變換；你的選擇會記在這台裝置，沒選過時預設是「系統」。</li>
     <li><b>摘要卡</b>：力度最強的一檔、顯著買超檔數（含連續上榜、新上榜、雙榜幾檔）、買方轉強檔數，以及被成交量門檻濾掉幾檔。</li>
     <li><b>力度排行</b>：顯著買超前 15 名，長條越長代表力度越大。</li>
     <li><b>佔股本比與力度</b>：橫軸是佔股本比、縱軸是力度，虛線是顯著門檻。藍點是顯著買超、橘點是買方轉強；圓形是上市、菱形是上櫃。滑過或點一下點可以看詳細數字。</li>

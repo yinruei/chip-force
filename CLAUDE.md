@@ -64,3 +64,8 @@ python chip_force.py --date 2026-09-29                 # 指定日期
 自選追蹤與上榜通知：KV `wl:<email>`（[{c,n,m}]，最多 50）、`push:<email>`（Web Push 訂閱，最多 3）、`vapid`（Worker 在第一次 `/api/push/key` 時產生的 P-256 金鑰，`public` 給瀏覽器、`d` 給 `notify.py` 簽名）、`notified`（上次通知的交易日）。Worker API：`GET/POST /api/watch`、`GET /api/push/key`、`POST /api/push`、`POST /api/push/off`（都要已開通且本月已驗證）；`/sw.js` 只顯示通知、不快取。`daily.yml` 上傳後跑 `notify.py`（pywebpush），條件和看頁面一樣（`st` 為 active、`vm` 為本月）；推播服務回 404/410 就移除該裝置。手動測試：Actions「測試上榜通知」（`notify.py --test EMAIL`）。刪除帳號會一併刪 `wl:`、`push:`。
 
 會員網站有 manifest 與主畫面圖示（`site/icons.js` 由 `site/icon.svg` 轉成 PNG 內嵌），手機加到主畫面會像 APP 全螢幕開啟。
+
+## 主題（淺色／深色／系統）
+- 顏色全部用 CSS 變數（design tokens）：`dashboard_template.html` 開頭的 `:root`（淺色）、`@media (prefers-color-scheme: dark) :root:not([data-theme="light"])`（系統是深色時）與 `:root[data-theme="dark"]`（手動選深色）三段；Worker 頁面在 `site/worker.js` 的 `STYLE` 同樣三段。**新增元件只用 `var(--…)`，不要寫死顏色**；需要新顏色就三段都加。品牌色當小字用 `--s1-ink`／`--s2-ink`（對比達 WCAG AA），實心底色上的字用 `--s1-fill` 配 `--on-s1`；陰影、遮罩用 `--shadow`、`--overlay`；追蹤的金色用 `--gold*`。深色那兩段內容要一致。
+- 偏好存在 localStorage `cf-theme`：`light`／`dark`／`system`（沒存過＝系統）。頁首的一行腳本（Worker 的 `THEME_INIT`，模板第 2 行）在畫面出現前設定 `<html data-theme>`，避免閃爍；系統模式不設屬性，由 CSS 媒體查詢即時跟著系統。
+- 切換鈕：儀表板是「主題」那組 `#themeSeg`（`THEMES`／`applyTheme`），Worker 頁面是 `page()` 上方的 `THEME_UI`；兩份規則相同。切換時只短暫加上 `html.theme-anim`（0.2 秒顏色過渡），偏好減少動態時不加；其他分頁透過 `storage` 事件同步。
